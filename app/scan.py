@@ -60,6 +60,7 @@ from .modules.reverse_image import generate_reverse_links, print_reverse_links
 from .modules.ai_analysis import analyze_report_with_ai
 from .modules.github_scanner import scan_github
 from .modules.waf_detector import detect_waf
+from .modules.cms_scanner import comprehensive_cms_fingerprint
 import os
 
 # Load environment variables
@@ -180,6 +181,7 @@ def scan(
     ai_analyze: bool = False,
     github_scan: bool = False,
     waf_detection: bool = False,
+    deep_cms_analysis: bool = False,
 ) -> Optional[tuple[Dict[str, Any], str]]:
     """
     Orchestrates the scanning process.
@@ -499,6 +501,12 @@ def scan(
         results["social_engineering"] = perform_social_recon(domain, found_emails)
         print("[+] Completed: social engineering recon")
 
+    # --- NEW FEATURE: Deep CMS Fingerprinting ---
+    if deep_cms_analysis:
+        print("\n[*] Starting Deep CMS Fingerprinting (Drupal/Joomla/Magento/Moodle)...")
+        results["cms_fingerprint"] = comprehensive_cms_fingerprint(base_url)
+        print("[+] Completed: CMS fingerprinting")
+
     # --- NEW FEATURE: WAF Detection ---
     if waf_detection:
         print("\n[*] Detecting Web Application Firewall (WAF)...")
@@ -605,6 +613,11 @@ def main():
         help="Enable Web Application Firewall (WAF) detection.",
     )
     parser.add_argument(
+        "--deep-cms",
+        action="store_true",
+        help="Enable deep CMS fingerprinting for Drupal, Joomla, Magento, and Moodle.",
+    )
+    parser.add_argument(
         "--version", action="version", version=f"Modular ReconX v{VERSION}"
     )
     setup_logging()
@@ -644,6 +657,7 @@ def main():
         ai_analyze=args.ai,
         github_scan=args.github,
         waf_detection=args.waf,
+        deep_cms_analysis=args.deep_cms,
     )
 
 
