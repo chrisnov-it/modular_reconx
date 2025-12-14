@@ -14,8 +14,7 @@ import os
 if __name__ == "__main__" and __package__ is None:
     current_dir = os.path.dirname(os.path.abspath(__file__))
     parent_dir = os.path.dirname(os.path.dirname(current_dir))
-    sys.path.append(os.path.dirname(current_dir))
-    sys.path.append(current_dir)
+    sys.path.insert(0, os.path.dirname(current_dir))
     __package__ = "app"
 
 # Local application imports
@@ -181,7 +180,7 @@ def scan(
     ai_analyze: bool = False,
     github_scan: bool = False,
     waf_detection: bool = False,
-) -> None:
+) -> Optional[tuple[Dict[str, Any], str]]:
     """
     Orchestrates the scanning process.
     
@@ -201,6 +200,9 @@ def scan(
         ai_analyze: If True, uses AI to analyze the final report.
         github_scan: If True, scans GitHub for secrets.
         waf_detection: If True, detects Web Application Firewalls.
+
+    Returns:
+        A tuple containing the results dictionary and the filename of the report, or None if failed.
     """
     # Check if input is a local file
     if os.path.isfile(target):
@@ -232,14 +234,14 @@ def scan(
             
         filename = save_report(results, output_format)
         print(f"\n[+] Results saved to: {filename}\n")
-        return
+        return results, filename
 
     domain = target
     # Validate input domain if not a file
     if not validate_domain(domain):
         print(f"[!] Invalid domain format: {domain}")
         logging.error(f"Invalid domain format: {domain}")
-        return
+        return None
     
     print(f"\n[SCAN] Starting OSINT scan for: {domain}")
     logging.info(f"Starting new OSINT scan for domain: {domain}")
@@ -524,6 +526,7 @@ def scan(
 
     filename = save_report(results, output_format)
     print(f"\n[+] Results saved to: {filename}\n")
+    return results, filename
 
 
 def main():
