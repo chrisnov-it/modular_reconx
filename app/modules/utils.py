@@ -279,6 +279,8 @@ def save_csv_output(data: Dict[str, Any]) -> str:
          
     return filename
 
+import html
+
 def save_html_output(data: Dict[str, Any]) -> str:
     """Saves the report data to a beautiful HTML file."""
     domain = data.get("domain", "unknown")
@@ -296,7 +298,7 @@ def save_html_output(data: Dict[str, Any]) -> str:
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>ReconX Report - {domain}</title>
+        <title>ReconX Report - {html.escape(domain)}</title>
         <style>
             :root {{
                 --primary: #4f46e5;
@@ -332,14 +334,14 @@ def save_html_output(data: Dict[str, Any]) -> str:
         <div class="container">
             <header>
                 <h1>🕵️ Modular ReconX Report</h1>
-                <div class="timestamp">Target: <strong>{domain}</strong> | {timestamp()}</div>
+                <div class="timestamp">Target: <strong>{html.escape(domain)}</strong> | {timestamp()}</div>
             </header>
             
             <div class="card">
                 <h2>📊 Executive Summary</h2>
                 <div class="grid">
-                    <div class="key-value"><span class="key">Target</span> <span>{domain}</span></div>
-                    <div class="key-value"><span class="key">IP Address</span> <span>{data.get('ip_address', 'N/A')}</span></div>
+                    <div class="key-value"><span class="key">Target</span> <span>{html.escape(domain)}</span></div>
+                    <div class="key-value"><span class="key">IP Address</span> <span>{html.escape(str(data.get('ip_address', 'N/A')))}</span></div>
                     <div class="key-value"><span class="key">Scan Time</span> <span>{timestamp()}</span></div>
                 </div>
             </div>
@@ -353,21 +355,23 @@ def save_html_output(data: Dict[str, Any]) -> str:
         if key in exclude_keys:
             continue
             
-        html_content += f'<div class="card"><h2>{key.replace("_", " ").title()}</h2>'
+        html_content += f'<div class="card"><h2>{html.escape(key.replace("_", " ").title())}</h2>'
         
         if isinstance(value, dict):
             # Special handling for certain nested dicts like open_ports
             if key == "open_ports" and "open_ports" in value:
                  # Flatten the inner ports dict
                  for p, banner in value["open_ports"].items():
-                     html_content += f'<div class="key-value"><span class="key">Port {p}</span> <span>{banner or "N/A"}</span></div>'
+                     banner_text = str(banner) if banner else "N/A"
+                     html_content += f'<div class="key-value"><span class="key">Port {html.escape(str(p))}</span> <span>{html.escape(banner_text)}</span></div>'
             else:
                 for k, v in value.items():
                     if isinstance(v, list):
-                        html_content += f'<div class="key-value"><span class="key">{k}</span> <span>{len(v)} items</span></div>'
-                        # html_content += f'<pre>{json.dumps(v, indent=2)}</pre>' # Optional: detailed list view
+                        html_content += f'<div class="key-value"><span class="key">{html.escape(str(k))}</span> <span>{len(v)} items</span></div>'
+                        # html_content += f'<pre>{html.escape(json.dumps(v, indent=2))}</pre>' # Optional: detailed list view
                     else:
-                        html_content += f'<div class="key-value"><span class="key">{k}</span> <span>{str(v)[:100]}</span></div>' # Truncate long strings
+                        val_str = str(v)[:100] # Truncate long strings
+                        html_content += f'<div class="key-value"><span class="key">{html.escape(str(k))}</span> <span>{html.escape(val_str)}</span></div>'
         elif isinstance(value, list):
             html_content += f'<p>Found {len(value)} items:</p><ul>'
             for item in value[:10]: # Show first 10 items to prevent HTML bloating
@@ -375,12 +379,12 @@ def save_html_output(data: Dict[str, Any]) -> str:
                     display_str = str(item.get("subdomain") or item.get("url") or str(item))
                 else:
                     display_str = str(item)
-                html_content += f'<li>{display_str}</li>'
+                html_content += f'<li>{html.escape(display_str)}</li>'
             if len(value) > 10:
                 html_content += f'<li>...and {len(value)-10} more</li>'
             html_content += '</ul>'
         else:
-             html_content += f'<p>{str(value)}</p>'
+             html_content += f'<p>{html.escape(str(value))}</p>'
              
         html_content += '</div>'
 
