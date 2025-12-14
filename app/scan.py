@@ -31,7 +31,7 @@ from .modules.social_finder import find_social_links
 from .modules.ssl_cert_info import get_ssl_info
 from .modules.subdomain_enum import enumerate_subdomains
 from .modules.tech_stack import get_tech_stack
-from .modules.utils import save_report
+from .modules.reporting import save_report
 from .modules.vuln_scanner import (
     check_versioned_vulnerabilities,
     search_general_vulnerabilities,
@@ -534,9 +534,9 @@ def main():
     parser.add_argument("target", help="The domain to scan (e.g., example.com) OR local file path")
     parser.add_argument(
         "--output",
-        choices=["json", "txt", "csv", "html"],
+        choices=["json", "txt", "csv", "html", "pdf"],
         default="json",
-        help="The output format for the report (json, txt, csv, or html).",
+        help="The output format for the report (json, txt, csv, html, or pdf).",
     )
     parser.add_argument(
         "--skip-ports", action="store_true", help="Skip the port scanning module."
