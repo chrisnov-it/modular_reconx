@@ -50,6 +50,7 @@ from .modules.cors_checker import comprehensive_cors_analysis
 from .modules.cookie_analysis import comprehensive_cookie_analysis
 from .modules.clickjacking_checker import comprehensive_clickjacking_analysis
 from .modules.param_pollution import comprehensive_parameter_pollution_analysis
+from .modules.xss_scanner import scan_xss
 
 # New modules
 from .modules.cloud_enum import check_cloud_storage
@@ -453,6 +454,17 @@ def scan(
         print("\n[*] Starting HTTP parameter pollution analysis...")
         results["param_pollution_analysis"] = comprehensive_parameter_pollution_analysis(base_url)
         print("[+] Completed: parameter pollution analysis")
+        
+        # Reflected XSS Fuzzing
+        # We pass the full URL (which might include params from user input or crawling)
+        # Note: In a real scenario, we'd crawl first. Here we assume user might supply params.
+        # But if the user supplies just 'example.com', params are empty.
+        # Ideally, we should use discovered URLs from WayBack/Crawling.
+        # For this version, we scan the base_url provided.
+        if "?" in domain or "&" in domain: # only scan if params exist in input
+             print("\n[*] Starting Reflected XSS Fuzzing...")
+             results["xss_scan"] = scan_xss(domain)
+             print("[+] Completed: XSS fuzzing")
 
     # --- NEW FEATURE: Cloud Enumeration ---
     if cloud_enum:
