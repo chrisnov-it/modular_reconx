@@ -7,7 +7,7 @@ import sys
 import os
 
 # Add the app directory to the Python path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'app'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'app'))
 
 from modules.cors_checker import comprehensive_cors_analysis
 from modules.cookie_analysis import comprehensive_cookie_analysis

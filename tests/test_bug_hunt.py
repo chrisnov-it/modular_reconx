@@ -7,7 +7,7 @@ import sys
 import os
 
 # Add the app directory to the Python path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'app'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'app'))
 
 from modules.param_analysis import comprehensive_param_analysis
 from modules.js_analysis import comprehensive_js_analysis

@@ -19,6 +19,12 @@ except ImportError:
     def timestamp() -> str:
         return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+# Import scoring module
+try:
+    from .scoring import VulnerabilityScorer
+except ImportError:
+    VulnerabilityScorer = None
+
 def _generate_filename(domain: str, extension: str) -> str:
     """Helper to create a consistent filename."""
     safe_domain = domain.replace(".", "_")
@@ -407,6 +413,176 @@ def save_html_output(data: Dict[str, Any]) -> str:
         raise IOError(f"Failed to save HTML report to {filename}: {e}")
     return filename
 
+def save_markdown_output(data: Dict[str, Any]) -> str:
+    """Saves the report data to a Markdown file optimized for bug bounty submissions."""
+    domain = data.get("domain", "unknown")
+    filename = _generate_filename(domain, "md")
+    os.makedirs("output", exist_ok=True)
+
+    # Check if this is a bug hunt scan and add scoring
+    scoring_results = None
+    if VulnerabilityScorer and any(key.startswith(('js_analysis', 'security_headers', 'form_analysis',
+                                                  'cors_analysis', 'clickjacking', 'param_pollution', 'xss_scan'))
+                                  for key in data.keys()):
+        scorer = VulnerabilityScorer()
+        scoring_results = scorer.analyze_bug_hunt_results(data)
+
+    markdown_content = []
+
+    # Header
+    markdown_content.append("# 🔍 Modular ReconX Security Report")
+    markdown_content.append(f"**Target:** `{domain}`")
+    markdown_content.append(f"**Generated:** {timestamp()}")
+    markdown_content.append(f"**IP Address:** {data.get('ip_address', 'N/A')}")
+    markdown_content.append("")
+
+    # Executive Summary (with scoring if available)
+    markdown_content.append("## 📊 Executive Summary")
+    if scoring_results:
+        markdown_content.append(f"**Overall Risk Score:** {scoring_results['overall_score']:.1f}/100 ({scoring_results['risk_level']})")
+        markdown_content.append("")
+        markdown_content.append(scoring_results['executive_summary'])
+        markdown_content.append("")
+
+        # Severity Distribution
+        markdown_content.append("### Risk Distribution")
+        for severity, count in scoring_results['severity_distribution'].items():
+            if count > 0:
+                emoji = {"CRITICAL": "🔴", "HIGH": "🟠", "MEDIUM": "🟡", "LOW": "🟢", "INFO": "ℹ️"}.get(severity, "❓")
+                markdown_content.append(f"- {emoji} **{severity}:** {count} findings")
+        markdown_content.append("")
+    else:
+        markdown_content.append("Standard reconnaissance scan completed.")
+        markdown_content.append("")
+
+    # Critical Findings (if scoring available)
+    if scoring_results and scoring_results['findings']:
+        markdown_content.append("## 🚨 Critical Security Findings")
+        critical_findings = [f for f in scoring_results['findings'] if f['severity'] == 'CRITICAL']
+        if critical_findings:
+            for finding in critical_findings:
+                markdown_content.append(f"### {finding['title']}")
+                markdown_content.append(f"**Severity:** {finding['severity']} (CVSS: {finding['cvss_score']})")
+                markdown_content.append(f"**Description:** {finding['description']}")
+                markdown_content.append(f"**Impact:** {finding['impact']}")
+                markdown_content.append("**Recommendations:**")
+                for rec in finding['recommendations']:
+                    markdown_content.append(f"- {rec}")
+                markdown_content.append("")
+        else:
+            markdown_content.append("No critical findings identified.")
+            markdown_content.append("")
+
+    # High Priority Findings
+    if scoring_results and scoring_results['findings']:
+        high_findings = [f for f in scoring_results['findings'] if f['severity'] == 'HIGH']
+        if high_findings:
+            markdown_content.append("## ⚠️ High Priority Issues")
+            for finding in high_findings:
+                markdown_content.append(f"### {finding['title']}")
+                markdown_content.append(f"**Severity:** {finding['severity']} (CVSS: {finding['cvss_score']})")
+                markdown_content.append(f"**Description:** {finding['description']}")
+                markdown_content.append(f"**Impact:** {finding['impact']}")
+                markdown_content.append("**Recommendations:**")
+                for rec in finding['recommendations']:
+                    markdown_content.append(f"- {rec}")
+                markdown_content.append("")
+            markdown_content.append("")
+
+    # Detailed Findings by Module
+    exclude_keys = ["domain", "ip_address", "error"]
+    module_order = [
+        "whois", "dns", "geoip", "ssl_certificate", "tech_stack",
+        "builtwith", "open_ports", "subdomains", "paths_found",
+        "wayback_urls", "social_links", "reverse_ip", "breach_check",
+        "vulnerabilities", "js_analysis", "api_discovery", "security_headers_analysis",
+        "form_analysis", "cors_analysis", "cookie_analysis", "clickjacking_analysis",
+        "param_pollution_analysis", "xss_scan"
+    ]
+
+    for key in module_order:
+        if key in data and key not in exclude_keys:
+            markdown_content.append(f"## {key.replace('_', ' ').title()}")
+
+            if key == "open_ports" and isinstance(data[key], dict) and "open_ports" in data[key]:
+                ports = data[key]["open_ports"]
+                if ports:
+                    markdown_content.append("| Port | Service/Banner |")
+                    markdown_content.append("|------|---------------|")
+                    for port, banner in sorted(ports.items()):
+                        banner_clean = str(banner)[:50] + "..." if banner and len(str(banner)) > 50 else str(banner or "N/A")
+                        markdown_content.append(f"| {port} | {banner_clean} |")
+                else:
+                    markdown_content.append("No open ports found.")
+            elif key == "subdomains" and isinstance(data[key], dict) and "found" in data[key]:
+                subdomains = data[key]["found"]
+                if subdomains:
+                    markdown_content.append("| Subdomain | IPs |")
+                    markdown_content.append("|-----------|-----|")
+                    for sub in subdomains[:20]:  # Limit for readability
+                        ips_str = ", ".join(sub.get("ips", ["N/A"]))
+                        markdown_content.append(f"| {sub['subdomain']} | {ips_str} |")
+                    if len(subdomains) > 20:
+                        markdown_content.append(f"*...and {len(subdomains)-20} more subdomains*")
+                else:
+                    markdown_content.append("No subdomains found.")
+            elif isinstance(data[key], dict):
+                for k, v in data[key].items():
+                    if isinstance(v, list) and v:
+                        markdown_content.append(f"**{k.replace('_', ' ').title()}:**")
+                        for item in v[:10]:  # Limit items
+                            if isinstance(item, dict):
+                                if "subdomain" in item:
+                                    markdown_content.append(f"- `{item['subdomain']}` (IPs: {', '.join(item.get('ips', []))})")
+                                elif "url" in item:
+                                    markdown_content.append(f"- `{item['url']}`")
+                                else:
+                                    markdown_content.append(f"- {item}")
+                            else:
+                                markdown_content.append(f"- {item}")
+                        if len(v) > 10:
+                            markdown_content.append(f"*...and {len(v)-10} more items*")
+                    elif isinstance(v, dict):
+                        markdown_content.append(f"**{k.replace('_', ' ').title()}:**")
+                        for sub_k, sub_v in v.items():
+                            markdown_content.append(f"  - {sub_k}: {sub_v}")
+                    else:
+                        markdown_content.append(f"**{k.replace('_', ' ').title()}:** {v}")
+            elif isinstance(data[key], list):
+                for item in data[key][:10]:
+                    markdown_content.append(f"- {item}")
+                if len(data[key]) > 10:
+                    markdown_content.append(f"*...and {len(data[key])-10} more items*")
+            else:
+                markdown_content.append(str(data[key]))
+
+            markdown_content.append("")
+
+    # Prioritized Recommendations (if scoring available)
+    if scoring_results and scoring_results['prioritized_recommendations']:
+        markdown_content.append("## 🎯 Prioritized Recommendations")
+        current_priority = None
+        for rec in scoring_results['prioritized_recommendations']:
+            if rec['priority'] != current_priority:
+                current_priority = rec['priority']
+                emoji = {"CRITICAL": "🔴", "HIGH": "🟠", "MEDIUM": "🟡", "LOW": "🟢"}.get(current_priority, "📋")
+                markdown_content.append(f"### {emoji} {current_priority} Priority")
+            markdown_content.append(f"- {rec['recommendation']}")
+        markdown_content.append("")
+
+    # Footer
+    markdown_content.append("---")
+    markdown_content.append("*Report generated by Modular ReconX - Advanced OSINT Tool*")
+    markdown_content.append("*For bug bounty programs, focus on high/critical severity findings*")
+
+    try:
+        with open(filename, "w", encoding="utf-8") as f:
+            f.write("\n".join(markdown_content))
+    except Exception as e:
+        raise IOError(f"Failed to save Markdown report to {filename}: {e}")
+
+    return filename
+
 def save_report(data: Dict[str, Any], output_format: str = "json") -> str:
     """Dispatches to the correct save function."""
     if output_format == "txt":
@@ -419,5 +595,7 @@ def save_report(data: Dict[str, Any], output_format: str = "json") -> str:
         return save_html_output(data)
     elif output_format == "pdf":
         return save_pdf_output(data)
+    elif output_format == "md":
+        return save_markdown_output(data)
     else:
         raise ValueError(f"Unsupported output format: {output_format}")

@@ -62,6 +62,8 @@ from .modules.ai_analysis import analyze_report_with_ai
 from .modules.github_scanner import scan_github
 from .modules.waf_detector import detect_waf
 from .modules.cms_scanner import comprehensive_cms_fingerprint
+from .modules.scoring import VulnerabilityScorer
+from .modules.advanced_vuln_detection import run_advanced_vulnerability_detection
 import os
 
 # Load environment variables
@@ -456,15 +458,27 @@ def scan(
         print("[+] Completed: parameter pollution analysis")
         
         # Reflected XSS Fuzzing
-        # We pass the full URL (which might include params from user input or crawling)
-        # Note: In a real scenario, we'd crawl first. Here we assume user might supply params.
-        # But if the user supplies just 'example.com', params are empty.
-        # Ideally, we should use discovered URLs from WayBack/Crawling.
-        # For this version, we scan the base_url provided.
-        if "?" in domain or "&" in domain: # only scan if params exist in input
-             print("\n[*] Starting Reflected XSS Fuzzing...")
-             results["xss_scan"] = scan_xss(domain)
-             print("[+] Completed: XSS fuzzing")
+        # We pass the base URL. The module will check for parameters on the homepage.
+        print("\n[*] Starting Reflected XSS Fuzzing...")
+        results["xss_scan"] = scan_xss(base_url)
+        print("[+] Completed: XSS fuzzing")
+
+        # --- ADVANCED VULNERABILITY DETECTION ---
+        print("\n[*] Running advanced vulnerability detection...")
+        advanced_results = run_advanced_vulnerability_detection(base_url)
+        results["advanced_vuln_detection"] = advanced_results
+        print("[+] Completed: Advanced vulnerability detection")
+        print(f"    - Checks performed: {advanced_results['summary']['total_checks']}")
+        print(f"    - Vulnerabilities found: {advanced_results['summary']['vulnerabilities_found']}")
+
+        # --- ENHANCED REPORTING: Security Scoring ---
+        print("\n[*] Analyzing security findings and generating risk assessment...")
+        scorer = VulnerabilityScorer()
+        scoring_results = scorer.analyze_bug_hunt_results(results)
+        results["security_assessment"] = scoring_results
+        print("[+] Completed: Security assessment")
+        print(f"    - Overall Risk Score: {scoring_results['overall_score']:.1f}/100 ({scoring_results['risk_level']})")
+        print(f"    - Total Findings: {len(scoring_results['findings'])}")
 
     # --- NEW FEATURE: Cloud Enumeration ---
     if cloud_enum:
@@ -475,7 +489,6 @@ def scan(
     # --- NEW FEATURE: Metadata Analysis ---
     if metadata_analysis:
         print("\n[*] Starting metadata analysis (this may take a while)...")
-        results["metadata_analysis"] = analyze_metadata(domain)
         results["metadata_analysis"] = analyze_metadata(domain)
         print("[+] Completed: metadata analysis")
 
@@ -557,9 +570,9 @@ def main():
     parser.add_argument("target", help="The domain to scan (e.g., example.com) OR local file path")
     parser.add_argument(
         "--output",
-        choices=["json", "txt", "csv", "html", "pdf"],
+        choices=["json", "txt", "csv", "html", "pdf", "md"],
         default="json",
-        help="The output format for the report (json, txt, csv, html, or pdf).",
+        help="The output format for the report (json, txt, csv, html, pdf, or md).",
     )
     parser.add_argument(
         "--skip-ports", action="store_true", help="Skip the port scanning module."

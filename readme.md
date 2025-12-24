@@ -40,6 +40,14 @@
 - ✅ Cookie Security Analysis (analyzes cookie security attributes)
 - ✅ Clickjacking Protection Checker (verifies anti-clickjacking measures)
 - ✅ HTTP Parameter Pollution Detector (identifies parameter duplication vulnerabilities)
+- ✅ Parameter Analysis (identifies potential injection points)
+- ✅ JavaScript Analysis (finds sensitive data and security issues in JS files)
+- ✅ API Endpoint Discovery (uncovers hidden API endpoints)
+- ✅ Security Headers Analysis (checks for proper HTTP security headers)
+- ✅ Form Analysis (identifies security issues in HTML forms)
+- ✅ CORS Misconfiguration Checker (detects dangerous CORS policies)
+- ✅ Cookie Security Analysis (analyzes cookie security attributes)
+- ✅ Clickjacking Protection Checker (verifies anti-clickjacking measures)
 - ✅ **Cloud Enumeration** (AWS S3, Azure Blob, GCP Bucket)
 - ✅ **Metadata Analysis** (PDF/DOCX metadata extraction)
 - ✅ **Image Forensics** (EXIF data extraction)
@@ -177,9 +185,11 @@ Some modules require local databases to function. A script is provided to downlo
 ## 🐧 Linux Specific Instructions
 
 ### Installation on Linux (Important)
+
 Since **PEP 668** was adopted by many Linux distributions (Debian 12, Ubuntu 23.04+, Linux Mint 22+, Kali, Parrot OS, etc.), installing Python packages globally using `pip` is strongly discouraged and often restricted to prevent conflicts with the system package manager (`apt`, `dnf`, `pacman`).
 
 #### Recommended Method: Virtual Environment
+
 We **strongly recommend** using a virtual environment for installation. This method isolates project dependencies from your system, preventing conflicts and permission issues.
 
 ```bash
@@ -204,11 +214,13 @@ reconx example.com
 ```
 
 To exit the virtual environment when you're done:
+
 ```bash
 deactivate
 ```
 
 #### Alternative: Pipx
+
 If you want to install it as a command-line tool usable from anywhere without manually activating a virtual environment, `pipx` is an excellent alternative.
 
 ```bash
@@ -221,6 +233,7 @@ pipx install git+https://github.com/rebarakaz/modular_reconx.git
 ```
 
 ### Running with Correct Permissions
+
 Some modules (like detailed port scanning) may require root privileges. If you installed via the Virtual Environment method:
 
 ```bash
@@ -229,6 +242,7 @@ sudo .venv/bin/reconx example.com
 ```
 
 ### Troubleshooting
+
 If you encounter "Externally Managed Environment" errors, it means you are trying to install system-wide without a virtual environment. Please use the **Recommended Method** above.
 
 ## 🚀 How to Run
@@ -340,7 +354,7 @@ reconx report.pdf
 ## 📋 CLI Reference
 
 | Flag | Description | Example |
-|------|-------------|---------|
+| ---- | ----------- | ------- |
 | `--output` | Output format: `json`, `txt`, `csv`, `html` | `reconx target.com --output html` |
 | `--cloud` | Enable cloud storage enumeration (AWS/Azure/GCP) | `reconx example.com --cloud` |
 | `--metadata` | Extract metadata from public documents (PDF/DOCX) | `reconx example.com --metadata` |
@@ -351,6 +365,15 @@ reconx report.pdf
 | `--github` | Enable GitHub Secret Scanning | `reconx example.com --github` |
 | `--waf` | Enable WAF Detection | `reconx example.com --waf` |
 | `--enhanced-subdomains` | Use larger wordlists for enumeration | `reconx example.com --enhanced-subdomains` |
+| `--param-analysis` | Analyze URL parameters for injection vulnerabilities | `reconx example.com --param-analysis` |
+| `--js-analysis` | Analyze JavaScript files for security issues | `reconx example.com --js-analysis` |
+| `--api-discovery` | Discover hidden API endpoints | `reconx example.com --api-discovery` |
+| `--security-headers` | Check HTTP security headers | `reconx example.com --security-headers` |
+| `--form-analysis` | Analyze HTML forms for security issues | `reconx example.com --form-analysis` |
+| `--cors-check` | Check for CORS misconfigurations | `reconx example.com --cors-check` |
+| `--cookie-analysis` | Analyze cookie security attributes | `reconx example.com --cookie-analysis` |
+| `--clickjacking-check` | Check for clickjacking protection | `reconx example.com --clickjacking-check` |
+| `--hpp-check` | Check for HTTP Parameter Pollution | `reconx example.com --hpp-check` |
 
 ### Combined Usage Examples
 
@@ -380,34 +403,42 @@ reconx leaked_document.pdf
 ### 🚀 Major New Features
 
 #### HTML & CSV Reporting
+
 - **Beautiful HTML Dashboards**: View your scan results in a modern, card-based interface.
 - **CSV Export**: Flattened data export perfect for Excel or spreadsheet analysis.
 
 #### AI Analysis (Powered by Gemini)
+
 - **Automatic Interpretation**: The tool now sends scan results to Google's Gemini AI to generate an "Executive Summary".
 - **Risk Assessment**: Get a second opinion on the severity of findings from an AI security expert.
 
 #### GitHub Scanning
+
 - **Secret Detection**: Scans public repositories for leaked API keys and secrets.
 - **Exposure Check**: Finds repositories related to the target domain.
 
 #### Web Application Firewall (WAF) Detection
+
 - **Protection Analysis**: Identifies if the target is protected by Cloudflare, AWS WAF, Akamai, etc.
 
 #### Cloud Storage Enumeration
+
 - **AWS S3 Bucket Discovery**: Automatically checks for public S3 buckets
 - **Azure Blob Storage**: Detects exposed Azure storage containers
 - **GCP Bucket Scanning**: Identifies publicly accessible Google Cloud buckets
 
 #### Document Metadata Analysis
+
 - **PDF/DOCX Extraction**: Extracts author, creator, creation date, and software info from public documents.
 - **Local File Support**: Analyze documents directly from your filesystem.
 
 #### Image Forensics & Reverse Search
+
 - **EXIF Data**: Pulls GPS coordinates, camera model, and timestamps.
 - **Reverse Search**: Generates links for Google Lens, Bing, Yandex, and TinEye.
 
 ### 🔧 Improvements
+
 - **Docker Efficiency**: Massive reduction in image size using volume mounting strategy.
 - **PEP 668 Compliance**: Updates for modern Linux distributions.
 - **CSV/HTML Ouput**: Integrated natively into the CLI.
@@ -416,6 +447,7 @@ reconx leaked_document.pdf
 ---
 
 ## 📜 What's New in v1.1
+
 (See CHANGELOG.md for older history)
 
 ## 📁 Directory Structure
