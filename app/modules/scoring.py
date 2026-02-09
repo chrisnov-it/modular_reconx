@@ -2,8 +2,7 @@
 Enhanced scoring and severity assessment for bug hunt findings
 """
 
-from typing import Dict, List, Any, Tuple
-import re
+from typing import Dict, List, Any
 
 
 class SeverityLevel:

@@ -72,7 +72,7 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/rebarakaz/modular_reconx.git
+git clone https://github.com/chrisnov-it/modular_reconx.git
 cd modular_reconx
 
 # Install dependencies
@@ -96,7 +96,7 @@ Docker provides an isolated environment with all dependencies pre-configured.
 
 ```bash
 # Clone the repository
-git clone https://github.com/rebarakaz/modular_reconx.git
+git clone https://github.com/chrisnov-it/modular_reconx.git
 cd modular_reconx
 
 # 1. Setup Environment
@@ -197,7 +197,7 @@ We **strongly recommend** using a virtual environment for installation. This met
 sudo apt install python3-pip python3-venv -y
 
 # 2. Clone the repository
-git clone https://github.com/rebarakaz/modular_reconx.git
+git clone https://github.com/chrisnov-it/modular_reconx.git
 cd modular_reconx
 
 # 3. Create a virtual environment
@@ -229,7 +229,7 @@ sudo apt install pipx
 pipx ensurepath
 
 # Install modular-reconx via pipx
-pipx install git+https://github.com/rebarakaz/modular_reconx.git
+pipx install git+https://github.com/chrisnov-it/modular_reconx.git
 ```
 
 ### Running with Correct Permissions

@@ -6,8 +6,8 @@ import requests
 import re
 import time
 import threading
-from typing import Dict, List, Any, Optional, Tuple
-from urllib.parse import urljoin, urlparse
+from typing import Dict, List, Any, Tuple
+from urllib.parse import urljoin
 import logging
 
 logger = logging.getLogger(__name__)

@@ -14,10 +14,10 @@ setup(
     description="A modular OSINT tool for performing complete analysis of domains or websites using open-source intelligence techniques",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/rebarakaz/modular_reconx",
+    url="https://github.com/chrisnov-it/modular_reconx",
     project_urls={
-        "Bug Tracker": "https://github.com/rebarakaz/modular_reconx/issues",
-        "Documentation": "https://github.com/rebarakaz/modular_reconx#readme",
+        "Bug Tracker": "https://github.com/chrisnov-it/modular_reconx/issues",
+        "Documentation": "https://github.com/chrisnov-it/modular_reconx#readme",
     },
     classifiers=[
         "Development Status :: 4 - Beta",
