@@ -1,11 +1,11 @@
 # modules/vuln_scanner.py (Final Version with Local Database)
 import os
-import requests
 import logging
 import sqlite3
 from typing import Dict, Any, List
 
 from .utils import get_resource_path
+from .http_client import get_http_client
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +75,7 @@ def _query_vulners_api(technologies: List[Dict[str, str]]) -> Dict[str, Any]:
         query = f"affectedSoftware.name:{tech['name']} AND affectedSoftware.version:{tech['version']}"
         params = {"query": query, "apiKey": api_key, "size": 5}
         try:
-            response = requests.get(VULNERS_API_URL, params=params, timeout=15)
+            response = get_http_client().get(VULNERS_API_URL, params=params, timeout=15)
             response.raise_for_status()
             data = response.json()
 
@@ -92,7 +92,7 @@ def _query_vulners_api(technologies: List[Dict[str, str]]) -> Dict[str, Any]:
                         "source": "Vulners API",  # Indicates this data is from the API
                     }
                     vulnerabilities[tech_key].append(vuln)
-        except requests.exceptions.RequestException as e:
+        except Exception as e:
             vulnerabilities[f"{tech['name']}/{tech['version']}"] = {
                 "error": f"API request failed: {e}"
             }
@@ -213,7 +213,7 @@ def search_general_vulnerabilities(keyword: str) -> Dict[str, Any]:
     payload = {"query": keyword, "apiKey": api_key, "size": 5}
 
     try:
-        response = requests.post(
+        response = get_http_client().post(
             VULNERS_LUCENE_API_URL, json=payload, headers=headers, timeout=15
         )
         response.raise_for_status()

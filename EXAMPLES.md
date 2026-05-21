@@ -8,11 +8,11 @@ This document provides practical examples of using Modular ReconX for various se
 - [Penetration Testing](#penetration-testing)
 - [Security Research](#security-research)
 - [Incident Response](#incident-response)
-- [Compliance & Auditing](#compliance--auditing)
+- [Compliance & Auditing](#compliance-auditing)
 
 ---
 
-## 🎯 Bug Bounty Hunting
+## 🎯 Bug Bounty Hunting {#bug-bounty-hunting}
 
 ### Scenario 1: Initial Reconnaissance
 
@@ -100,7 +100,7 @@ reconx suspicious_image.jpg
 
 ---
 
-## 🔒 Penetration Testing
+## 🔒 Penetration Testing {#penetration-testing}
 
 ### Scenario 5: External Penetration Test
 
@@ -145,7 +145,7 @@ reconx target.com --social --metadata
 
 ---
 
-## 🔬 Security Research
+## 🔬 Security Research {#security-research}
 
 ### Scenario 7: Vulnerability Research
 
@@ -188,7 +188,7 @@ done
 
 ---
 
-## 🚨 Incident Response
+## 🚨 Incident Response {#incident-response}
 
 ### Scenario 9: Data Breach Investigation
 
@@ -236,7 +236,7 @@ reconx phishing-image.jpg
 
 ---
 
-## ✅ Compliance & Auditing
+## ✅ Compliance & Auditing {#compliance-auditing}
 
 ### Scenario 11: Cloud Security Audit
 
@@ -291,10 +291,10 @@ reconx company.com --metadata --forensics
 **Goal**: Gather intelligence without detection
 
 ```bash
-# Passive-only with rate limiting
+# Passive-only with rate limiting for HTTP modules that use the shared client
 reconx target.com --passive-only --rate-limit 2.0
 
-# Use proxy for anonymity
+# Use proxy for HTTP modules that use the shared client
 reconx target.com --passive-only --proxy socks5://127.0.0.1:9050
 
 # Custom user agent
@@ -304,8 +304,8 @@ reconx target.com --passive-only --user-agent "Mozilla/5.0..."
 **Stealth tactics:**
 
 - Passive-only scanning
-- Rate limiting
-- Proxy usage
+- Rate limiting for shared-client HTTP modules
+- Proxy usage for shared-client HTTP modules
 - User agent rotation
 
 ### Scenario 14: Comprehensive Assessment
@@ -423,4 +423,4 @@ docker-compose run --rm reconx target.com --bug-hunt
 
 **Remember**: These examples are for authorized security testing only. Always obtain proper permission before scanning any target.
 
-**Happy (Ethical) Hacking! 🔐**
+Happy (Ethical) Hacking! 🔐

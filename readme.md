@@ -1,443 +1,456 @@
-# 🕵️ Modular ReconX v1.3.0
+# Modular ReconX v1.3.0
 
-![Modular ReconX Splash Screen](splash.png)
+Modular ReconX is a modular Python OSINT and bug bounty reconnaissance tool for analyzing domains, websites, and selected local files. It combines passive intelligence gathering, active reconnaissance, vulnerability enrichment, and report generation in one CLI.
 
-**Modular ReconX** is a modular OSINT tool based on Python for performing a complete analysis of a domain or website using open-source intelligence techniques.
+> Use this tool only on assets you own or are explicitly authorized to test. Read [RESPONSIBLE_USE.md](RESPONSIBLE_USE.md) before running active scans.
 
-## ✨ Features
+## Features
 
-- ✅ WHOIS Lookup (with fallback)
-- ✅ DNS Record Scan (A, MX, NS, TXT)
-- ✅ BuiltWith-like Detection (tech stack & CMS)
-- ✅ GeoIP Lookup (server location)
-- ✅ Port Scanner (21-8080)
-- ✅ Subdomain Enumerator (wordlist-based)
-- ✅ Certificate Transparency Log Monitoring (enhanced subdomain discovery)
-- ✅ Reverse IP Lookup (HackerTarget & ViewDNS fallback)
-- ✅ Directory/Path Bruteforce (/admin, /login, etc.)
-- ✅ SSL Certificate Info (common name & issuer)
-- ✅ Social Media Finder (Facebook, IG, Twitter, LinkedIn, TikTok, Threads, YouTube, Telegram)
-- ✅ Breach Email Check (optional WHOIS email scan with HIBP and Mozilla Monitor fallback)
-- ✅ Vulnerability Check (via Vulners API for detected tech with offline NVD database support)
-- ✅ Wayback Machine URL History
-- ✅ Enhanced WordPress Plugin Vulnerability Scanner (automatic plugin detection via multiple methods and vulnerability assessment)
-- ✅ Domain Correlation (filter reverse IP results by WHOIS similarity)
-- ✅ Caching Mechanism (1-hour cache for DNS and WHOIS lookups)
-- ✅ Input Validation (domain format validation)
-- ✅ Improved Error Handling
-- ✅ Enhanced Privacy Mode (passive-only scanning to avoid detection)
-- ✅ Proxy Support (SOCKS/HTTP proxy for anonymizing requests)
-- ✅ User-Agent Rotation (automatic rotation to avoid detection)
-- ✅ Rate Limiting Controls (configurable delays between requests)
-- ✅ Enhanced Vulnerability Scanning (local exploit database with offline searchsploit-like functionality)
-- ✅ Subdomain Enumeration Enhancements (permutation-based discovery and enhanced wordlists)
-- ✅ Parameter Analysis (identifies potential injection points)
-- ✅ JavaScript Analysis (finds sensitive data and security issues in JS files)
-- ✅ API Endpoint Discovery (uncovers hidden API endpoints)
-- ✅ Security Headers Analysis (checks for proper HTTP security headers)
-- ✅ Form Analysis (identifies security issues in HTML forms)
-- ✅ CORS Misconfiguration Checker (detects dangerous CORS policies)
-- ✅ Cookie Security Analysis (analyzes cookie security attributes)
-- ✅ Clickjacking Protection Checker (verifies anti-clickjacking measures)
-- ✅ HTTP Parameter Pollution Detector (identifies parameter duplication vulnerabilities)
-- ✅ **Cloud Enumeration** (AWS S3, Azure Blob, GCP Bucket)
-- ✅ **Metadata Analysis** (PDF/DOCX metadata extraction)
-- ✅ **Image Forensics** (EXIF data extraction)
-- ✅ **Social Engineering Recon** (Dorks & Email Pattern Analysis)
-- ✅ **Reverse Image Search** (Google Lens, Bing, Yandex, TinEye links)
-- ✅ **Docker Support** (Containerized deployment)
-- ✅ **Local File Analysis** (Analyze local images and documents)
-- ✅ **AI Reporting** (Google Gemini analysis of scan results)
-- ✅ **GitHub Scanning** (Secret scanning & dorks)
-- ✅ **WAF Detection** (Web Application Firewall identification)
-- ✅ **HTML/CSV Reports** (Beautiful dashboards and spreadsheet-ready output)
+- WHOIS, DNS, SSL certificate, GeoIP, reverse IP, and Wayback discovery
+- Wordlist and Certificate Transparency subdomain discovery
+- Technology, CMS, WordPress plugin, WAF, and security header checks
+- Optional bug-hunt modules for parameters, JavaScript, APIs, forms, CORS, cookies, clickjacking, HPP, and XSS reflection checks
+- Cloud storage enumeration for common AWS S3, Azure Blob, and GCP bucket names
+- Metadata and image forensics for public files and local files
+- GitHub dork/API scanning, breach lookup, and Gemini-powered AI report analysis
+- JSON, TXT, CSV, HTML, PDF, and Markdown reports
+- Shared HTTP client with proxy, custom User-Agent, retry, timeout, and rate-limit support
 
-## ⚙️ Setup
+## Requirements
 
-### 1. Prerequisites
+- Python 3.8 or newer
+- Git
+- Optional but recommended: `uv`
+- Optional: Docker and Docker Compose
+- Optional API keys for Shodan, HIBP, Vulners, ZoomEye, WPScan, Gemini, GitHub, and MaxMind
 
-- Python 3.8+
+## Quick Start
 
-### 2. Installation
+### Windows 10/11 PowerShell with uv
 
-#### Option A: Standard Installation
+`uv` is the fastest path for day-to-day development. It can create `.venv`, install dependencies from `requirements.txt`, and install this project in editable mode.
 
-```bash
-# Clone the repository
-git clone https://github.com/rebarakaz/modular_reconx.git
+Install `uv` if needed:
+
+```powershell
+winget install astral-sh.uv
+uv --version
+```
+
+Then set up the project:
+
+```powershell
+git clone https://github.com/chrisnov-it/modular_reconx.git
 cd modular_reconx
 
-# Install dependencies
-pip install -r requirements.txt
+uv venv --python 3.14 .venv
+.\.venv\Scripts\Activate.ps1
 
-# Install as a package
-pip install -e .
-```
+uv pip install -r requirements.txt
+uv pip install -e .
 
-This installation method allows you to run the tool from anywhere using:
-
-```bash
-reconx example.com
-# or
-modular-reconx example.com
-```
-
-#### Option B: Docker Installation (Recommended)
-
-Docker provides an isolated environment with all dependencies pre-configured.
-
-```bash
-# Clone the repository
-git clone https://github.com/rebarakaz/modular_reconx.git
-cd modular_reconx
-
-# 1. Setup Environment
-cp .env.example .env
-# Edit .env and verify/add your API Keys
-
-# 2. Download Data Dependencies (Using Docker)
-# This populates the local nvd_data/ and app/data/ folders which are mounted into the container
-docker-compose run --rm reconx python download_data.py
-
-# 3. Build & Run
-docker-compose build
-docker-compose run --rm reconx example.com
-```
-
-**Docker Benefits:**
-
-- **Clean & Fast Builds**: Uses `.dockerignore` to keep images small (~100MB layer).
-- **Persistent Data**: NVD database and GeoIP files are stored on your host machine (in `nvd_data/` and `app/data/`) and mounted to the container. You only need to download them once.
-- **Isolation**: strict separation from host system packages.
-
-### 3. Configuration (API Keys)
-
-Some modules in Modular ReconX require API keys to function. The tool uses a `.env` file to store these keys securely.
-
-1. Copy the `.env.example` file to a new file named `.env`. You can use this command in your terminal:
-
-    ```bash
-    cp .env.example .env
-    ```
-
-2. Open the newly created `.env` file with a text editor.
-
-3. Fill in the API keys you have. If you don't have any of the keys, just leave them empty, and the corresponding modules will be automatically skipped.
-
-    ```env
-    SHODAN_API_KEY="YourShodanAPIKeyHere"
-    HIBP_API_KEY="YourHaveIBeenPwnedAPIKeyHere"
-    VULNERS_API_KEY="YourVulnersAPIKeyHere"
-    ZOOMEYE_API_KEY="YourZoomEyeAPIKeyHere"
-    WPSCAN_API_KEY="YourWPScanAPIKeyHere"
-    GEMINI_API_KEY="YourGeminiAPIKeyHere"
-    GITHUB_TOKEN="YourGitHubTokenHere"
-    ```
-
-    - **VULNERS_API_KEY**: Required for vulnerability scanning. A free key can be obtained from Vulners.com.
-    - **WPSCAN_API_KEY**: Required for WordPress-specific scanning. A free key (25 requests/day) can be obtained from WPScan.com.
-    - **GEMINI_API_KEY**: Required for AI Analysis features (Google AI Studio).
-    - **GITHUB_TOKEN**: Optional for higher rate limits on GitHub scanning.
-
-### 4. Download Data Dependencies
-
-Some modules require local databases to function. A script is provided to download and set up these dependencies automatically.
-
-1. **GeoLite2 Database (for GeoIP lookups):**
-    - Sign up for a free [MaxMind account](https://www.maxmind.com/en/geolite2/signup) to get a license key.
-    - Add your key to the `.env` file:
-
-        ```env
-        MAXMIND_LICENSE_KEY="YourMaxMindLicenseKeyHere"
-        ```
-
-2. **Run the Download Script:**
-
-    ```bash
-    python download_data.py
-    ```
-
-    This command will download the GeoLite2 database and the latest NVD vulnerability feeds.
-
-    **Note:** The script automatically skips existing files to save bandwidth. To force a redownload of all files, use the `--force` flag:
-
-    ```bash
-    python download_data.py --force
-    ```
-
-    You can also run `python download_data.py --nvd` or `python download_data.py --geoip` to download them separately.
-
-3. **Update the NVD Database:**
-    After downloading the NVD JSON feeds, it's recommended to process them into the local database for the tool to use.
-
-    ```bash
-    python update_db.py
-    ```
-
-## 🐧 Linux Specific Instructions
-
-### Installation on Linux (Important)
-Since **PEP 668** was adopted by many Linux distributions (Debian 12, Ubuntu 23.04+, Linux Mint 22+, Kali, Parrot OS, etc.), installing Python packages globally using `pip` is strongly discouraged and often restricted to prevent conflicts with the system package manager (`apt`, `dnf`, `pacman`).
-
-#### Recommended Method: Virtual Environment
-We **strongly recommend** using a virtual environment for installation. This method isolates project dependencies from your system, preventing conflicts and permission issues.
-
-```bash
-# 1. Install pip and venv if not present
-sudo apt install python3-pip python3-venv -y
-
-# 2. Clone the repository
-git clone https://github.com/rebarakaz/modular_reconx.git
-cd modular_reconx
-
-# 3. Create a virtual environment
-python3 -m venv .venv
-
-# 4. Activate the virtual environment
-source .venv/bin/activate
-
-# 5. Install the tool in editable mode
-pip install -e .
-
-# 6. Run the tool
-reconx example.com
-```
-
-To exit the virtual environment when you're done:
-```bash
-deactivate
-```
-
-#### Alternative: Pipx
-If you want to install it as a command-line tool usable from anywhere without manually activating a virtual environment, `pipx` is an excellent alternative.
-
-```bash
-# Install pipx
-sudo apt install pipx
-pipx ensurepath
-
-# Install modular-reconx via pipx
-pipx install git+https://github.com/rebarakaz/modular_reconx.git
-```
-
-### Running with Correct Permissions
-Some modules (like detailed port scanning) may require root privileges. If you installed via the Virtual Environment method:
-
-```bash
-# While inside the virtual environment (.venv)
-sudo .venv/bin/reconx example.com
-```
-
-### Troubleshooting
-If you encounter "Externally Managed Environment" errors, it means you are trying to install system-wide without a virtual environment. Please use the **Recommended Method** above.
-
-## 🚀 How to Run
-
-> **💡 Check out [EXAMPLES.md](EXAMPLES.md) for 14+ real-world bug bounty and security assessment scenarios!**
-
-```bash
-reconx example.com
-# or
-modular-reconx example.com
-```
-
-To speed up the scan, you can skip the slower modules like port scanning and path bruteforcing:
-
-```bash
+reconx --help
 reconx example.com --skip-ports --skip-bruteforce
 ```
 
-To generate reports in different formats:
+If Python 3.14 is not installed yet, either install it through Python Manager (`py install 3.14`) or let `uv` use another available compatible runtime:
+
+```powershell
+uv python list
+uv venv --python 3.13 .venv
+```
+
+### Windows 10/11 PowerShell with Python Manager
+
+Modern Python on Windows is managed through the Python install manager. Install it from the Microsoft Store, from python.org, or with WinGet:
+
+```powershell
+winget install 9NQ7512CXL7T -e
+py install --configure -y
+py install 3.14
+py list
+```
+
+Then create a virtual environment for this project. This avoids broken global packages and is especially helpful after moving projects between machines or drives.
+
+```powershell
+git clone https://github.com/chrisnov-it/modular_reconx.git
+cd modular_reconx
+
+py -3.14 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+python -m pip install -e .
+
+reconx --help
+reconx example.com --skip-ports --skip-bruteforce
+```
+
+If `py -3.14` is not available, check installable runtimes:
+
+```powershell
+py list --online 3.14
+py install 3.14
+```
+
+If `python` opens the Microsoft Store instead of Python, run `py install --configure -y`, then check Windows App Execution Aliases for `python.exe`, `python3.exe`, and `py.exe`. Inside an activated venv, `python` should resolve to `.venv\Scripts\python.exe`.
+
+If PowerShell blocks venv activation:
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+.\.venv\Scripts\Activate.ps1
+```
+
+### Linux / macOS with uv
 
 ```bash
-# Generate HTML report with visualizations (Best for viewing)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+git clone https://github.com/chrisnov-it/modular_reconx.git
+cd modular_reconx
+
+uv venv --python 3.14 .venv
+source .venv/bin/activate
+
+uv pip install -r requirements.txt
+uv pip install -e .
+
+reconx --help
+reconx example.com --skip-ports --skip-bruteforce
+```
+
+### Linux / macOS with standard venv
+
+```bash
+git clone https://github.com/chrisnov-it/modular_reconx.git
+cd modular_reconx
+
+python3 -m venv .venv
+source .venv/bin/activate
+
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+python -m pip install -e .
+
+reconx --help
+reconx example.com --skip-ports --skip-bruteforce
+```
+
+On Debian, Ubuntu, Kali, Parrot, and other PEP 668 systems, do not install globally with `sudo pip`. Use the venv flow above.
+
+### Reopening the Project Later
+
+After the venv has already been created:
+
+```powershell
+cd D:\dev\chrisnov-it\modular_reconx
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+reconx --help
+```
+
+Linux/macOS:
+
+```bash
+cd /path/to/modular_reconx
+source .venv/bin/activate
+reconx --help
+```
+
+## Configuration
+
+Copy the example environment file and fill only the keys you have:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Linux/macOS:
+
+```bash
+cp .env.example .env
+```
+
+Supported environment variables:
+
+```env
+SHODAN_API_KEY=""
+HIBP_API_KEY=""
+VULNERS_API_KEY=""
+ZOOMEYE_API_KEY=""
+WPSCAN_API_KEY=""
+GEMINI_API_KEY=""
+GITHUB_TOKEN=""
+MAXMIND_LICENSE_KEY=""
+```
+
+Modules that require missing keys will skip or return a note/error instead of stopping the whole scan.
+
+## Data Setup
+
+Some features use local data files. After configuring `.env`, run:
+
+```bash
+python download_data.py
+python update_db.py
+```
+
+Useful variants:
+
+```bash
+python download_data.py --geoip
+python download_data.py --nvd
+python download_data.py --force
+```
+
+GeoIP downloads require `MAXMIND_LICENSE_KEY`.
+
+## Docker
+
+Docker is useful when you want a clean, repeatable runtime.
+
+```bash
+cp .env.example .env
+docker-compose run --rm reconx python download_data.py
+docker-compose build
+docker-compose run --rm reconx example.com --skip-ports --skip-bruteforce
+```
+
+Mounted folders:
+
+- `output/` for generated reports
+- `nvd_data/` for downloaded NVD feeds
+- `app/data/` for wordlists, GeoIP, and local databases
+
+## Usage
+
+Basic scan:
+
+```bash
+reconx example.com
+```
+
+Faster, less noisy scan:
+
+```bash
+reconx example.com --profile safe
+```
+
+Passive-only reconnaissance:
+
+```bash
+reconx example.com --profile passive
+```
+
+Bug bounty oriented run:
+
+```bash
+reconx example.com --profile aggressive --bug-hunt --output md
+```
+
+HTML report:
+
+```bash
 reconx example.com --output html
-
-# Generate CSV reports for spreadsheet analysis
-reconx example.com --output csv
 ```
 
-To enable domain correlation (compare WHOIS data of reverse IP results):
+Proxy, custom User-Agent, and rate limiting:
 
 ```bash
-reconx example.com --correlate
+reconx example.com --proxy http://127.0.0.1:8080 --rate-limit 1.0 --user-agent "Custom UA"
 ```
 
-To enable comprehensive bug hunting mode with advanced security analysis:
+Local file analysis:
 
 ```bash
-reconx example.com --bug-hunt
-```
-
-For enhanced privacy and security, you can use passive-only scanning mode:
-
-```bash
-reconx example.com --passive-only
-```
-
-To use a proxy for anonymizing requests:
-
-```bash
-reconx example.com --proxy http://127.0.0.1:8080
-```
-
-To set a custom user agent:
-
-```bash
-reconx example.com --user-agent "Custom User Agent String"
-```
-
-To add rate limiting between requests:
-
-```bash
-reconx example.com --rate-limit 1.0
-```
-
-You can combine multiple privacy and security options:
-
-```bash
-reconx example.com --passive-only --proxy http://127.0.0.1:8080 --rate-limit 0.5
-```
-
-```bash
-reconx example.com --correlate
-```
-
-Results are saved as a JSON file in the `output/` directory.
-
-## 🕵️ Advanced Usage
-
-### Cloud & Metadata
-
-```bash
-reconx example.com --cloud --metadata
-```
-
-### Forensics & Social Engineering
-
-```bash
-reconx example.com --forensics --social --reverse
-```
-
-### HTML Reporting (Dashboard)
-
-```bash
-reconx example.com --output html
-```
-
-### Local File Analysis
-
-You can run analysis directly on local files:
-
-```bash
-# Analyze an image for EXIF data
 reconx image.jpg
-
-# Analyze a document for metadata
-reconx report.pdf
+reconx document.pdf
 ```
 
-## 📋 CLI Reference
+Reports are written to `output/`.
 
-| Flag | Description | Example |
-|------|-------------|---------|
-| `--output` | Output format: `json`, `txt`, `csv`, `html` | `reconx target.com --output html` |
-| `--cloud` | Enable cloud storage enumeration (AWS/Azure/GCP) | `reconx example.com --cloud` |
-| `--metadata` | Extract metadata from public documents (PDF/DOCX) | `reconx example.com --metadata` |
-| `--forensics` | Analyze images for EXIF data | `reconx example.com --forensics` |
-| `--social` | Generate Google Dorks and analyze email patterns | `reconx example.com --social` |
-| `--reverse` | Generate reverse image search links | `reconx example.com --forensics --reverse` |
-| `--ai` | Enable AI Analysis (Gemini) | `reconx example.com --ai` |
-| `--github` | Enable GitHub Secret Scanning | `reconx example.com --github` |
-| `--waf` | Enable WAF Detection | `reconx example.com --waf` |
-| `--enhanced-subdomains` | Use larger wordlists for enumeration | `reconx example.com --enhanced-subdomains` |
+## CLI Reference
 
-### Combined Usage Examples
+| Flag | Description |
+| ---- | ----------- |
+| `--output {json,txt,csv,html,pdf,md}` | Select report format. Default: `json`. |
+| `--profile {passive,safe,active,aggressive}` | Select scan intensity. Default: `active`. |
+| `--skip-ports` | Skip TCP port scanning. |
+| `--skip-bruteforce` | Skip path bruteforcing. |
+| `--passive-only` | Alias for `--profile passive`. |
+| `--proxy URL` | Proxy URL for modules using the shared HTTP client. |
+| `--rate-limit SECONDS` | Minimum delay between shared HTTP client requests. |
+| `--user-agent VALUE` | Custom User-Agent for modules using the shared HTTP client. |
+| `--correlate` | Correlate reverse IP neighbors by WHOIS similarity. Slow. |
+| `--bug-hunt` | Run advanced web security analysis modules. Requires `--profile aggressive`. |
+| `--cloud` | Check common cloud storage bucket/container names. |
+| `--metadata` | Search public documents and extract PDF/DOCX metadata. |
+| `--forensics` | Scrape and analyze images for EXIF data. |
+| `--social` | Generate social engineering recon data and dorks. |
+| `--reverse` | Add reverse image search links when image URLs are available. |
+| `--enhanced-subdomains` | Use a larger subdomain wordlist. Slower. |
+| `--ai` | Analyze the final report with Gemini. Requires `GEMINI_API_KEY`. |
+| `--github` | Generate GitHub dorks and optionally use GitHub API. |
+| `--waf` | Detect common Web Application Firewalls. |
+| `--deep-cms` | Fingerprint Drupal, Joomla, Magento, and Moodle. |
+| `--version` | Print the Modular ReconX version. |
+
+## Scan Modes
+
+Recommended workflow for authorized testing:
+
+1. Start passive:
+
+    ```bash
+    reconx target.com --profile passive --output json
+    ```
+
+2. Run safe active checks:
+
+    ```bash
+    reconx target.com --profile safe --deep-cms --output html
+    ```
+
+3. Run heavier bug-hunt checks only when allowed:
+
+    ```bash
+    reconx target.com --profile aggressive --bug-hunt --rate-limit 1.0 --output md
+    ```
+
+Profile behavior:
+
+- `passive`: no active HTTP probing beyond passive/API-style discovery.
+- `safe`: HTTP fingerprinting and low-impact checks, but no port scan/path bruteforce.
+- `active`: default scan profile, including port scan and path bruteforce unless skipped.
+- `aggressive`: required for `--bug-hunt` fuzzing and advanced vulnerability checks.
+
+## Project Layout
+
+- `app/scan.py`: CLI entry point and scan orchestration
+- `app/modules/`: individual reconnaissance modules
+- `app/modules/http_client.py`: shared HTTP client for proxy/rate-limit/user-agent behavior
+- `app/data/`: packaged wordlists and local data files
+- `nvd_data/`: downloaded NVD JSON feeds
+- `output/`: generated reports
+- `cache/`: WHOIS/DNS cache files
+- `tests/`: test scripts and pytest-style checks
+- `scripts/`: demos and maintenance utilities
+
+## Development
+
+Create or activate the venv first, then install in editable mode:
 
 ```bash
-# Full OSINT scan with all new features and HTML report
-reconx example.com --cloud --metadata --forensics --social --reverse --output html
-
-# Cloud security assessment
-reconx example.com --cloud
-
-# Document intelligence gathering
-reconx example.com --metadata
-
-# Image forensics investigation
-reconx example.com --forensics --reverse
-
-# Social engineering recon
-reconx example.com --social
-
-# Local file analysis (auto-detects file type)
-reconx suspicious_image.jpg
-reconx leaked_document.pdf
+uv pip install -r requirements.txt
+uv pip install -e .
 ```
 
-## 🆕 What's New in v1.3.0
+Run syntax checks:
 
-### 🚀 Major New Features
+```bash
+python -m compileall -q app tests scripts
+```
 
-#### HTML & CSV Reporting
-- **Beautiful HTML Dashboards**: View your scan results in a modern, card-based interface.
-- **CSV Export**: Flattened data export perfect for Excel or spreadsheet analysis.
+Run tests if `pytest` is installed:
 
-#### AI Analysis (Powered by Gemini)
-- **Automatic Interpretation**: The tool now sends scan results to Google's Gemini AI to generate an "Executive Summary".
-- **Risk Assessment**: Get a second opinion on the severity of findings from an AI security expert.
+```bash
+uv pip install pytest
+python -m pytest -q
+```
 
-#### GitHub Scanning
-- **Secret Detection**: Scans public repositories for leaked API keys and secrets.
-- **Exposure Check**: Finds repositories related to the target domain.
+## Troubleshooting
 
-#### Web Application Firewall (WAF) Detection
-- **Protection Analysis**: Identifies if the target is protected by Cloudflare, AWS WAF, Akamai, etc.
+### `python` opens Microsoft Store
 
-#### Cloud Storage Enumeration
-- **AWS S3 Bucket Discovery**: Automatically checks for public S3 buckets
-- **Azure Blob Storage**: Detects exposed Azure storage containers
-- **GCP Bucket Scanning**: Identifies publicly accessible Google Cloud buckets
+Install/configure the Python install manager, then recreate the venv:
 
-#### Document Metadata Analysis
-- **PDF/DOCX Extraction**: Extracts author, creator, creation date, and software info from public documents.
-- **Local File Support**: Analyze documents directly from your filesystem.
+```powershell
+winget install 9NQ7512CXL7T -e
+py install --configure -y
+py install 3.14
+py -3.14 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+python -m pip install -e .
+```
 
-#### Image Forensics & Reverse Search
-- **EXIF Data**: Pulls GPS coordinates, camera model, and timestamps.
-- **Reverse Search**: Generates links for Google Lens, Bing, Yandex, and TinEye.
+If commands still resolve to the Store aliases, check Windows Settings -> App Execution Aliases.
 
-### 🔧 Improvements
-- **Docker Efficiency**: Massive reduction in image size using volume mounting strategy.
-- **PEP 668 Compliance**: Updates for modern Linux distributions.
-- **CSV/HTML Ouput**: Integrated natively into the CLI.
-- **Windows Unicode Fixes**: Resolved character encoding issues on Windows consoles.
+### `pip` is missing or commands are not found
 
----
+If you are using `uv`, reinstall with:
 
-## 📜 What's New in v1.1
-(See CHANGELOG.md for older history)
+```powershell
+uv pip install -r requirements.txt
+uv pip install -e .
+```
 
-## 📁 Directory Structure
+If you are using standard pip, prefer module form inside the venv:
 
-- `app/data/`: Contains wordlists, GeoIP database, and NVD vulnerability database
-- `app/modules/`: Individual OSINT modules
-- `nvd_data/`: NVD JSON data files for offline vulnerability checking
-- `output/`: JSON/HTML/CSV scan reports
-- `app/scan.py`: Main execution script
-- `setup.py`: Package installation script
-- `requirements.txt`: Python dependencies
-- `.env`: Configuration file for API keys
-- `tests/`: Unit tests
-- `scripts/`: Utility scripts (data download, updates, demos)
+```powershell
+python -m ensurepip --default-pip
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
 
-## 🤝 Contributing
+### `reconx` is not recognized
 
-Feel free to fork the repository and submit pull requests. For major changes, please open an issue first to discuss what you would like to change.
+Activate the venv and reinstall editable package:
 
-## 👤 Author
+```powershell
+.\.venv\Scripts\Activate.ps1
+uv pip install -e .
+```
 
-### **Reynov Christian aka BabyDev**
+### PDF output fails
 
-- Business: Chrisnov IT Solutions
+Install dependencies again. PDF output requires `reportlab`.
+
+```bash
+python -m pip install -r requirements.txt
+```
+
+### `lxml` asks for Microsoft Visual C++ Build Tools
+
+This usually means pip could not find a prebuilt wheel for your Python version and tried to compile `lxml` from source. On Windows with Python 3.14, use the updated requirements first:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install --only-binary=:all: "lxml>=6.0.2,<7.0.0"
+python -m pip install -r requirements.txt
+python -m pip install -e .
+```
+
+If pip still tries to build from source, either install Microsoft C++ Build Tools or use a Python runtime with wider wheel coverage:
+
+```powershell
+py install 3.13
+py -3.13 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+python -m pip install -e .
+```
+
+### GeoIP lookup has no data
+
+Add `MAXMIND_LICENSE_KEY` to `.env`, then run:
+
+```bash
+python download_data.py --geoip
+```
+
+## Responsible Use
+
+Only scan targets you own or are allowed to test. Some flags are active and can create traffic against the target. Prefer `--passive-only` first, then increase scope gradually based on authorization.
+
+See [RESPONSIBLE_USE.md](RESPONSIBLE_USE.md) and [SECURITY.md](SECURITY.md).
+
+## Author
+
+Reynov Christian / Chrisnov IT Solutions
+
 - Website: <https://chrisnov.com>

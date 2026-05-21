@@ -10,7 +10,9 @@ from .utils import get_resource_path  # Assuming this utility is still needed
 logger = logging.getLogger(__name__)
 
 
-def _resolve_subdomain(subdomain: str) -> Optional[Dict[str, Any]]:
+def _resolve_subdomain(
+    subdomain: str, record_types: Optional[List[str]] = None
+) -> Optional[Dict[str, Any]]:
     """
     Resolves a single subdomain to its IP addresses (IPv4 and IPv6) and CNAME if any.
 
@@ -20,53 +22,72 @@ def _resolve_subdomain(subdomain: str) -> Optional[Dict[str, Any]]:
     Returns:
         A dictionary with the subdomain, list of IPs, and CNAME (if found), otherwise None.
     """
+    if record_types is None:
+        record_types = ["A", "AAAA", "CNAME"]
+
+    wanted = {record_type.upper() for record_type in record_types}
     ips: List[str] = []
     cname: Optional[str] = None
+    mx_records: List[str] = []
 
     # Use a try-except block for overall DNS resolution, catching specific DNS errors
     try:
-        # Try to resolve A records (IPv4)
-        try:
-            a_answers = dns.resolver.resolve(
-                subdomain, "A", lifetime=2
-            )  # Shorter lifetime for quicker detection of timeouts
-            ips.extend([str(r) for r in a_answers])
-        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
-            pass  # No A record, but could still have AAAA or CNAME
-        except dns.resolver.Timeout:
-            logger.debug(f"DNS resolution timed out for A record of {subdomain}")
-        except dns.exception.DNSException as e:
-            logger.debug(f"DNS error for A record of {subdomain}: {e}")
+        if "A" in wanted:
+            try:
+                a_answers = dns.resolver.resolve(
+                    subdomain, "A", lifetime=2
+                )  # Shorter lifetime for quicker detection of timeouts
+                ips.extend([str(r) for r in a_answers])
+            except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
+                pass  # No A record, but could still have other records
+            except dns.resolver.Timeout:
+                logger.debug(f"DNS resolution timed out for A record of {subdomain}")
+            except dns.exception.DNSException as e:
+                logger.debug(f"DNS error for A record of {subdomain}: {e}")
 
-        # Try to resolve AAAA records (IPv6)
-        try:
-            aaaa_answers = dns.resolver.resolve(subdomain, "AAAA", lifetime=2)
-            ips.extend([str(r) for r in aaaa_answers])
-        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
-            pass  # No AAAA record
-        except dns.resolver.Timeout:
-            logger.debug(f"DNS resolution timed out for AAAA record of {subdomain}")
-        except dns.exception.DNSException as e:
-            logger.debug(f"DNS error for AAAA record of {subdomain}: {e}")
+        if "AAAA" in wanted:
+            try:
+                aaaa_answers = dns.resolver.resolve(subdomain, "AAAA", lifetime=2)
+                ips.extend([str(r) for r in aaaa_answers])
+            except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
+                pass  # No AAAA record
+            except dns.resolver.Timeout:
+                logger.debug(f"DNS resolution timed out for AAAA record of {subdomain}")
+            except dns.exception.DNSException as e:
+                logger.debug(f"DNS error for AAAA record of {subdomain}: {e}")
 
-        # Try to resolve CNAME records
-        try:
-            cname_answers = dns.resolver.resolve(subdomain, "CNAME", lifetime=2)
-            if cname_answers:
-                cname = str(cname_answers[0])  # Get the first CNAME target
-        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
-            pass  # No CNAME record
-        except dns.resolver.Timeout:
-            logger.debug(f"DNS resolution timed out for CNAME record of {subdomain}")
-        except dns.exception.DNSException as e:
-            logger.debug(f"DNS error for CNAME record of {subdomain}: {e}")
+        if "CNAME" in wanted:
+            try:
+                cname_answers = dns.resolver.resolve(subdomain, "CNAME", lifetime=2)
+                if cname_answers:
+                    cname = str(cname_answers[0])  # Get the first CNAME target
+            except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
+                pass  # No CNAME record
+            except dns.resolver.Timeout:
+                logger.debug(f"DNS resolution timed out for CNAME record of {subdomain}")
+            except dns.exception.DNSException as e:
+                logger.debug(f"DNS error for CNAME record of {subdomain}: {e}")
 
-        if ips or cname:
-            return {
+        if "MX" in wanted:
+            try:
+                mx_answers = dns.resolver.resolve(subdomain, "MX", lifetime=2)
+                mx_records.extend([r.to_text() for r in mx_answers])
+            except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
+                pass
+            except dns.resolver.Timeout:
+                logger.debug(f"DNS resolution timed out for MX record of {subdomain}")
+            except dns.exception.DNSException as e:
+                logger.debug(f"DNS error for MX record of {subdomain}: {e}")
+
+        if ips or cname or mx_records:
+            result = {
                 "subdomain": subdomain,
                 "ips": sorted(list(set(ips))),
                 "cname": cname,
             }
+            if mx_records:
+                result["mx"] = sorted(list(set(mx_records)))
+            return result
 
         # If no A, AAAA, or CNAME records were found after trying all, it probably doesn't exist.
         return None
@@ -82,6 +103,7 @@ def enumerate_subdomains(
     wordlist_path: str = get_resource_path("data/subdomains.txt"),
     workers: int = 50,
     use_enhanced_wordlist: bool = False,
+    record_types: Optional[List[str]] = None,
 ) -> Dict[str, List[Dict[str, Any]]]:
     """
     Enumerates subdomains for a given domain using a wordlist and concurrency.
@@ -92,6 +114,7 @@ def enumerate_subdomains(
         wordlist_path: Path to the subdomain wordlist file.
         workers: Number of concurrent threads to use for DNS resolution.
         use_enhanced_wordlist: Whether to use the larger wordlist.
+        record_types: DNS record types to query. Defaults to A, AAAA, and CNAME.
 
     Returns:
         A dictionary containing a list of found subdomains, each with its IP(s) and CNAME.
@@ -117,7 +140,7 @@ def enumerate_subdomains(
     wildcard_ips: List[str] = []
     random_sub = f"nonexistent-{uuid.uuid4().hex[:8]}.{domain}"
     logger.info(f"Checking for wildcard DNS using: {random_sub}")
-    wildcard_result = _resolve_subdomain(random_sub)
+    wildcard_result = _resolve_subdomain(random_sub, record_types)
     if wildcard_result and wildcard_result.get("ips"):
         wildcard_ips = wildcard_result["ips"]
         logger.info(f"Detected potential wildcard IPs: {', '.join(wildcard_ips)}")
@@ -130,7 +153,7 @@ def enumerate_subdomains(
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
         future_to_subdomain = {
-            executor.submit(_resolve_subdomain, sub): sub for sub in subdomains_to_check
+            executor.submit(_resolve_subdomain, sub, record_types): sub for sub in subdomains_to_check
         }
 
         progress = tqdm(

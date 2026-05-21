@@ -1,7 +1,7 @@
 import concurrent.futures
 import logging
-import requests
 from typing import Dict, List, Any
+from .http_client import get_http_client
 
 def check_url(url: str, provider: str) -> Dict[str, Any]:
     """
@@ -9,7 +9,7 @@ def check_url(url: str, provider: str) -> Dict[str, Any]:
     """
     try:
         # Set a short timeout to speed up scanning
-        response = requests.head(url, timeout=3, allow_redirects=True)
+        response = get_http_client().head(url, timeout=3, allow_redirects=True)
         if response.status_code in [200, 403]:
             # 200: Publicly accessible
             # 403: Exists but private (still a finding)
@@ -19,7 +19,7 @@ def check_url(url: str, provider: str) -> Dict[str, Any]:
                 "status": response.status_code,
                 "accessible": response.status_code == 200
             }
-    except requests.RequestException:
+    except Exception:
         pass
     return {}
 

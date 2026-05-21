@@ -9,7 +9,7 @@ import os
 # Add the parent directory to the path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from app.modules.utils import save_report
+from app.modules.reporting import save_report
 
 def test_enhanced_output_formats():
     """Test the enhanced output and reporting features"""

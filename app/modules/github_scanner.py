@@ -1,7 +1,7 @@
-import requests
 import os
 import logging
 from typing import Dict, Any, List
+from .http_client import get_http_client
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +48,7 @@ def scan_github(domain: str) -> Dict[str, Any]:
     url = f"https://api.github.com/search/code?q={query}&per_page=5"
     
     try:
-        response = requests.get(url, headers=headers, timeout=10)
+        response = get_http_client().get(url, headers=headers, timeout=10)
         if response.status_code == 200:
             data = response.json()
             items = data.get("items", [])

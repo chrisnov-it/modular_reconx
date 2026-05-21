@@ -1,4 +1,3 @@
-import requests
 import concurrent.futures
 import logging
 import uuid
@@ -6,17 +5,17 @@ from typing import List, Dict, Optional, Any
 from urllib.parse import urljoin
 from tqdm import tqdm
 from .utils import get_resource_path
+from .http_client import get_http_client
 
 logger = logging.getLogger(__name__)
 
 
-def _get_404_baseline(session: requests.Session, base_url: str) -> Optional[int]:
+def _get_404_baseline(base_url: str) -> Optional[int]:
     """
     Makes a request to a known-non-existent path to establish a baseline
     for "soft 404" pages by checking the content length.
 
     Args:
-        session: The requests.Session object.
         base_url: The target base URL.
 
     Returns:
@@ -26,23 +25,22 @@ def _get_404_baseline(session: requests.Session, base_url: str) -> Optional[int]
     test_url = urljoin(base_url, random_path)
     try:
         # We use a HEAD request to get the headers without the body.
-        response = session.head(test_url, timeout=5, allow_redirects=False)
+        response = get_http_client().head(test_url, timeout=5, allow_redirects=False)
         # Return the content-length if the server provides it.
         return int(response.headers.get("Content-Length", -1))
-    except (requests.exceptions.RequestException, ValueError):
+    except (Exception, ValueError):
         # Ignore errors, we'll just proceed without a baseline.
         return None
 
 
 def _check_path(
-    session: requests.Session, url: str, path: str, baseline_404_size: Optional[int]
+    url: str, path: str, baseline_404_size: Optional[int]
 ) -> Optional[Dict[str, Any]]:
     """
     Checks if a single path exists on the target server using a HEAD request.
     Filters out responses that match the baseline "soft 404" size.
 
     Args:
-        session: The requests.Session object to use for the request.
         url: The full URL to check.
         path: The path component being tested (e.g., '/admin').
         baseline_404_size: The content length of a known 404 page.
@@ -51,7 +49,7 @@ def _check_path(
         A dictionary with path, status code, and content type if found, otherwise None.
     """
     try:
-        response = session.head(url, timeout=5, allow_redirects=False)
+        response = get_http_client().head(url, timeout=5, allow_redirects=False)
 
         # We consider any status code other than 404 as potentially interesting.
         if response.status_code != 404:
@@ -67,7 +65,7 @@ def _check_path(
                 "content_type": response.headers.get("Content-Type", "N/A"),
             }
 
-    except requests.exceptions.RequestException as e:
+    except Exception as e:
         # Log the error for debugging but don't crash the scan.
         logger.warning(f"Request failed for path '{path}' on {url}: {e}")
         return None
@@ -100,42 +98,34 @@ def bruteforce_paths(
         logger.error(f"Path bruteforce wordlist not found at: {wordlist_path}")
         return {"error": f"Wordlist not found at {wordlist_path}"}
 
-    with requests.Session() as session:
-        session.headers.update(
-            {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-            }
+    # Establish a baseline for soft 404s
+    baseline_404_size = _get_404_baseline(base_url)
+    if baseline_404_size is not None and baseline_404_size != -1:
+        logger.info(
+            f"Established soft 404 baseline with content length: {baseline_404_size}"
         )
 
-        # Establish a baseline for soft 404s
-        baseline_404_size = _get_404_baseline(session, base_url)
-        if baseline_404_size is not None and baseline_404_size != -1:
-            logger.info(
-                f"Established soft 404 baseline with content length: {baseline_404_size}"
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
+        future_to_path = {
+            executor.submit(
+                _check_path,
+                urljoin(base_url, path),
+                path,
+                baseline_404_size,
             )
+            for path in wordlist
+        }
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
-            future_to_path = {
-                executor.submit(
-                    _check_path,
-                    session,
-                    urljoin(base_url, path),
-                    path,
-                    baseline_404_size,
-                )
-                for path in wordlist
-            }
+        progress = tqdm(
+            concurrent.futures.as_completed(future_to_path),
+            total=len(wordlist),
+            desc="Path Bruteforce",
+            unit="path",
+            leave=False,
+        )
 
-            progress = tqdm(
-                concurrent.futures.as_completed(future_to_path),
-                total=len(wordlist),
-                desc="Path Bruteforce",
-                unit="path",
-                leave=False,
-            )
-
-            for future in progress:
-                if result := future.result():
-                    found_paths.append(result)
+        for future in progress:
+            if result := future.result():
+                found_paths.append(result)
 
     return {"found": sorted(found_paths, key=lambda x: x["path"])}

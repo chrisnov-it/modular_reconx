@@ -1,13 +1,15 @@
-import requests
 from bs4 import BeautifulSoup
 from bs4.element import Tag
 from typing import List, Dict
+from .http_client import get_http_client
 
 
 def find_social_links(domain: str) -> List[Dict[str, str]]:
     url = f"http://{domain}"
     try:
-        response = requests.get(url, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
+        response = get_http_client().get(
+            url, timeout=10, headers={"User-Agent": "Mozilla/5.0"}
+        )
         soup = BeautifulSoup(response.text, "html.parser")
         links = soup.find_all("a", href=True)
 
