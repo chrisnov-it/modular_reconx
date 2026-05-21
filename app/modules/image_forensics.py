@@ -1,11 +1,11 @@
 import os
 import logging
-import requests
 from io import BytesIO
 from typing import Dict, Any, List, Optional
 from PIL import Image, ExifTags
 from urllib.parse import urljoin
 from bs4 import BeautifulSoup
+from .http_client import get_http_client
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +68,7 @@ def analyze_image(target: str, is_local: bool = False) -> Dict[str, Any]:
         else:
             # Remote URL
             try:
-                response = requests.get(target, timeout=10, stream=True)
+                response = get_http_client().get(target, timeout=10, stream=True)
                 response.raise_for_status()
                 img = Image.open(BytesIO(response.content))
             except Exception as e:
@@ -92,7 +92,7 @@ def find_images(domain: str) -> List[str]:
     images = []
     try:
         url = f"http://{domain}"
-        response = requests.get(url, timeout=10)
+        response = get_http_client().get(url, timeout=10)
         soup = BeautifulSoup(response.text, 'html.parser')
         
         for img in soup.find_all('img'):

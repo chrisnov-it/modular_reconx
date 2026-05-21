@@ -1,10 +1,10 @@
 
-import requests
 import re
 import logging
 from typing import Dict, Any, List, Optional
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
+from .http_client import get_http_client
 
 # Setup logger
 logger = logging.getLogger(__name__)
@@ -18,7 +18,7 @@ def scan_drupal(base_url: str) -> Dict[str, Any]:
     # 1. Version Detection via CHANGELOG.txt (common in older Drupal)
     cl_url = urljoin(base_url, "CHANGELOG.txt")
     try:
-        r = requests.get(cl_url, timeout=5)
+        r = get_http_client().get(cl_url, timeout=5)
         if r.status_code == 200 and "Drupal" in r.text:
             # Extract version
             match = re.search(r"Drupal\s+([0-9]+\.[0-9]+(?:\.[0-9]+)?)", r.text)
@@ -41,7 +41,7 @@ def scan_drupal(base_url: str) -> Dict[str, Any]:
     for path, desc in paths:
         try:
             full_url = urljoin(base_url, path)
-            r = requests.get(full_url, timeout=5)
+            r = get_http_client().get(full_url, timeout=5)
             if r.status_code == 200:
                 # Filter out soft 200s (custom error pages that return 200)
                 if "page not found" not in r.text.lower() and "access denied" not in r.text.lower():
@@ -51,7 +51,7 @@ def scan_drupal(base_url: str) -> Dict[str, Any]:
 
     # 3. Header check for version (X-Generator)
     try:
-        r = requests.get(base_url, timeout=5)
+        r = get_http_client().get(base_url, timeout=5)
         gen = r.headers.get("X-Generator", "")
         if "Drupal" in gen and results["version"] == "unknown":
             match = re.search(r"Drupal\s+([0-9]+)", gen)
@@ -76,7 +76,7 @@ def scan_joomla(base_url: str) -> Dict[str, Any]:
     for manifest in manifests:
         try:
             url = urljoin(base_url, manifest)
-            r = requests.get(url, timeout=5)
+            r = get_http_client().get(url, timeout=5)
             if r.status_code == 200 and "xml" in r.headers.get("Content-Type", ""):
                  match = re.search(r"<version>([^<]+)</version>", r.text)
                  if match:
@@ -98,7 +98,7 @@ def scan_joomla(base_url: str) -> Dict[str, Any]:
     for path, desc in paths:
         try:
             full_url = urljoin(base_url, path)
-            r = requests.get(full_url, timeout=5)
+            r = get_http_client().get(full_url, timeout=5)
             if r.status_code == 200 and "login" in r.text.lower():
                  results["exposure"].append(f"Exposed: {path} ({desc})")
             elif r.status_code == 200 and "directory listing" in r.text.lower():
@@ -120,7 +120,7 @@ def scan_magento(base_url: str) -> Dict[str, Any]:
     for f in files:
          try:
             url = urljoin(base_url, f)
-            r = requests.get(url, timeout=5)
+            r = get_http_client().get(url, timeout=5)
             if r.status_code == 200:
                 if "Magento" in r.text:
                     results["exposure"].append(f"Exposed file: {f}")
@@ -133,7 +133,7 @@ def scan_magento(base_url: str) -> Dict[str, Any]:
     for path in admin_paths:
         try:
             url = urljoin(base_url, path)
-            r = requests.get(url, timeout=5)
+            r = get_http_client().get(url, timeout=5)
             # Magento admin usually redirects to a login page with a specific key
             if r.status_code == 200 and ("magento" in r.text.lower() or "login" in r.text.lower()):
                  results["exposure"].append(f"Possible Admin Path: /{path}")
@@ -144,7 +144,7 @@ def scan_magento(base_url: str) -> Dict[str, Any]:
     # 3. Check for specific Magento 2 API endpoint visibility
     try:
         api_url = urljoin(base_url, "rest/V1/store/storeConfigs")
-        r = requests.get(api_url, timeout=5)
+        r = get_http_client().get(api_url, timeout=5)
         if r.status_code == 200:
             results["exposure"].append("REST API Accessible (may leak configuration info)")
     except:
@@ -165,7 +165,7 @@ def scan_moodle(base_url: str) -> Dict[str, Any]:
     for path, regex in urls:
         try:
              url = urljoin(base_url, path)
-             r = requests.get(url, timeout=5)
+             r = get_http_client().get(url, timeout=5)
              if r.status_code == 200:
                  match = re.search(regex, r.text)
                  if match:
@@ -177,7 +177,7 @@ def scan_moodle(base_url: str) -> Dict[str, Any]:
     # 2. Check for open registration
     try:
         reg_url = urljoin(base_url, "login/signup.php")
-        r = requests.get(reg_url, timeout=5)
+        r = get_http_client().get(reg_url, timeout=5)
         if r.status_code == 200 and "New account" in r.text:
             results["exposure"].append("Open User Registration found at /login/signup.php")
     except:
@@ -188,7 +188,7 @@ def scan_moodle(base_url: str) -> Dict[str, Any]:
     for f in files:
         try:
             url = urljoin(base_url, f)
-            r = requests.get(url, timeout=5)
+            r = get_http_client().get(url, timeout=5)
             if r.status_code == 200:
                 results["exposure"].append(f"Exposed file: {f}")
         except:
@@ -202,7 +202,7 @@ def detect_cms(base_url: str) -> Optional[str]:
     This is a quick heuristic check using requests/headers/meta.
     """
     try:
-        response = requests.get(base_url, timeout=10, allow_redirects=True)
+        response = get_http_client().get(base_url, timeout=10, allow_redirects=True)
         html_content = response.text.lower()
         headers = response.headers
         

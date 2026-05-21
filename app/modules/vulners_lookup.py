@@ -1,7 +1,7 @@
-import requests
 import os
 import logging
 from typing import List, Dict, Any
+from .http_client import get_http_client
 
 
 def search_vulnerabilities(software_name: str) -> List[Dict[str, Any]]:
@@ -27,7 +27,7 @@ def search_vulnerabilities(software_name: str) -> List[Dict[str, Any]]:
     }
 
     try:
-        response = requests.post(
+        response = get_http_client().post(
             "https://vulners.com/api/v3/search/lucene/",
             json=payload,
             headers=headers,
@@ -52,6 +52,6 @@ def search_vulnerabilities(software_name: str) -> List[Dict[str, Any]]:
             vulnerabilities.append(vuln)
         return vulnerabilities
 
-    except requests.exceptions.RequestException as e:
+    except Exception as e:
         logging.error(f"Error connecting to Vulners API: {e}")
         return [{"error": f"Could not connect to Vulners API: {e}"}]

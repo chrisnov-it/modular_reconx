@@ -3,7 +3,7 @@ import concurrent.futures
 import logging
 import re
 import sys
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from dotenv import load_dotenv
 from pyfiglet import figlet_format
@@ -39,6 +39,7 @@ from .modules.wayback_machine import get_wayback_urls
 from .modules.whois_lookup import get_whois
 from .modules.wp_scanner import scan_wordpress_site
 from .modules.ct_log_monitor import monitor_certificate_transparency
+from .modules.http_client import configure_http_client, get_http_client
 
 # Bug hunting modules
 from .modules.param_analysis import comprehensive_param_analysis
@@ -71,6 +72,7 @@ load_dotenv()
 
 # Version information
 VERSION = "1.3.0"
+ScanProfile = Literal["passive", "safe", "active", "aggressive"]
 
 
 def setup_logging() -> None:
@@ -114,6 +116,33 @@ def validate_domain(domain: str) -> bool:
     )
     
     return bool(pattern.match(domain))
+
+
+def resolve_base_url(domain: str) -> str:
+    """
+    Resolve a usable base URL for HTTP modules, preferring HTTPS.
+    """
+    for url in (f"https://{domain}", f"http://{domain}"):
+        try:
+            response = get_http_client().head(url, timeout=5, allow_redirects=True)
+            if response.status_code < 500:
+                return response.url.rstrip("/")
+        except Exception:
+            try:
+                response = get_http_client().get(url, timeout=5, allow_redirects=True)
+                if response.status_code < 500:
+                    return response.url.rstrip("/")
+            except Exception:
+                continue
+
+    return f"https://{domain}"
+
+
+def normalize_scan_profile(profile: ScanProfile, passive_only: bool) -> ScanProfile:
+    """Keep --passive-only backward-compatible with the new profile system."""
+    if passive_only:
+        return "passive"
+    return profile
 
 
 def filter_related_domains(
@@ -173,6 +202,8 @@ def scan(
     output_format: str = "json",
     skip_ports: bool = False,
     skip_bruteforce: bool = False,
+    passive_only: bool = False,
+    profile: ScanProfile = "active",
     correlate_domains: bool = False,
     bug_hunt_mode: bool = False,
     cloud_enum: bool = False,
@@ -194,6 +225,8 @@ def scan(
         output_format: The format of the output report (json or txt).
         skip_ports: If True, skips the port scanning module.
         skip_bruteforce: If True, skips the path bruteforcing module.
+        passive_only: If True, skips active target interaction.
+        profile: Scan intensity profile.
         correlate_domains: If True, correlates reverse IP results with WHOIS data.
         bug_hunt_mode: If True, enables advanced bug hunting modules.
         cloud_enum: If True, enables cloud storage enumeration.
@@ -242,6 +275,12 @@ def scan(
         return results, filename
 
     domain = target
+    effective_profile = normalize_scan_profile(profile, passive_only)
+    passive_only = effective_profile == "passive"
+    allow_safe_active = effective_profile in ("safe", "active", "aggressive")
+    allow_active = effective_profile in ("active", "aggressive")
+    allow_aggressive = effective_profile == "aggressive"
+
     # Validate input domain if not a file
     if not validate_domain(domain):
         print(f"[!] Invalid domain format: {domain}")
@@ -249,8 +288,13 @@ def scan(
         return None
     
     print(f"\n[SCAN] Starting OSINT scan for: {domain}")
+    print(f"[*] Scan profile: {effective_profile}")
+    if passive_only:
+        print("[*] Passive-only mode enabled. Active scans and target probing will be skipped.")
+    elif bug_hunt_mode and not allow_aggressive:
+        print("[!] Bug hunting mode requested but requires --profile aggressive. It will be skipped.")
     logging.info(f"Starting new OSINT scan for domain: {domain}")
-    results: Dict[str, Any] = {"domain": domain}
+    results: Dict[str, Any] = {"domain": domain, "scan_profile": effective_profile}
     
     # Define scans that only need a domain name (passive)
     scans_to_run = {
@@ -265,17 +309,24 @@ def scan(
     # Initial IP lookup is blocking, as many other scans depend on it.
     print("[*] Looking up main IP...")
     ip = get_ip(domain)
-    base_url = f"http://{domain}"
+    base_url = f"https://{domain}"
     
     # Determine if active scans that require a live host are possible.
     if not ip:
         print(f"  [!] Failed to get IP for {domain}. Active scans will be skipped.")
         logging.warning(f"Could not resolve IP for {domain}. Skipping active scans.")
         results["error"] = "IP address could not be resolved."
+    elif passive_only:
+        results["ip_address"] = ip
+        print(f"  [+] Found IP: {ip}")
+        logging.info("Passive-only mode active. Skipping active scans for %s.", domain)
     else:
         results["ip_address"] = ip
         print(f"  [+] Found IP: {ip}")
-        # base_url is already defined above
+        print("[*] Resolving HTTP base URL (HTTPS first)...")
+        base_url = resolve_base_url(domain)
+        results["base_url"] = base_url
+        print(f"  [+] Using base URL: {base_url}")
         
         # Add active scans to the list
         active_scans = {
@@ -285,10 +336,14 @@ def scan(
             "reverse_ip": (reverse_ip_lookup, ip),
             "ssl_certificate": (get_ssl_info, domain),
         }
-        if not skip_ports:
+        if allow_active and not skip_ports:
             active_scans["open_ports"] = (scan_ports, ip)
-        if not skip_bruteforce:
+        elif not allow_active:
+            results["open_ports"] = {"note": f"Skipped in {effective_profile} profile."}
+        if allow_active and not skip_bruteforce:
             active_scans["paths_found"] = (bruteforce_paths, base_url)
+        elif not allow_active:
+            results["paths_found"] = {"note": f"Skipped in {effective_profile} profile."}
         scans_to_run.update(active_scans)
     
     # Use ThreadPoolExecutor for cleaner and more modern concurrency management.
@@ -350,17 +405,22 @@ def scan(
         }
     
     # Perform general keyword vulnerability search
-    print(
-        "  [+] Starting: general vulnerability search based on keywords (Vulners.com)..."
-    )
-    # Use server or x_powered_by from tech_stack, or domain as fallback keyword
-    keyword = (
-        tech_stack_results.get("server")
-        or tech_stack_results.get("x_powered_by")
-        or domain
-    )
-    results["vulnerabilities_by_keyword"] = search_general_vulnerabilities(keyword)
-    print("  [+] Completed: vulnerabilities_by_keyword")
+    if not passive_only:
+        print(
+            "  [+] Starting: general vulnerability search based on keywords (Vulners.com)..."
+        )
+        # Use server or x_powered_by from tech_stack, or domain as fallback keyword
+        keyword = (
+            tech_stack_results.get("server")
+            or tech_stack_results.get("x_powered_by")
+            or domain
+        )
+        results["vulnerabilities_by_keyword"] = search_general_vulnerabilities(keyword)
+        print("  [+] Completed: vulnerabilities_by_keyword")
+    else:
+        results["vulnerabilities_by_keyword"] = {
+            "note": "Skipped in passive-only mode because no active technology fingerprint was collected."
+        }
     
     # --- "NOISY NEIGHBORS" CORRELATION FEATURE (FINAL VERSION) ---
     if correlate_domains:
@@ -395,7 +455,7 @@ def scan(
         if any("wordpress" in cms.lower() for cms in builtwith_cms):
             is_wordpress = True
     
-    if is_wordpress:
+    if is_wordpress and allow_active:
         print("\n[*] WordPress detected. Starting comprehensive plugin scan with WPScan...")
         
         # Use the enhanced WordPress scanner
@@ -407,9 +467,16 @@ def scan(
         print(f"    - Plugins detected: {wpscan_results.get('scan_summary', {}).get('total_plugins_detected', 0)}")
         print(f"    - Vulnerable plugins: {wpscan_results.get('scan_summary', {}).get('vulnerable_plugins', 0)}")
         print(f"    - Total vulnerabilities: {wpscan_results.get('scan_summary', {}).get('total_vulnerabilities', 0)}")
+    elif is_wordpress:
+        results["wpscan_results"] = {"note": f"Skipped in {effective_profile} profile."}
 
     # --- NEW FEATURE: Bug Hunting Modules ---
-    if bug_hunt_mode and ip:
+    if bug_hunt_mode and passive_only:
+        print("\n[!] Bug hunting mode requested but skipped because --passive-only is active.")
+        results["bug_hunt"] = {"note": "Skipped because passive-only mode is active."}
+    elif bug_hunt_mode and not allow_aggressive:
+        results["bug_hunt"] = {"note": "Skipped because --bug-hunt requires --profile aggressive."}
+    elif bug_hunt_mode and ip:
         print("\n[*] Bug hunting mode enabled. Starting advanced security analysis...")
         
         # Parameter Analysis
@@ -493,7 +560,10 @@ def scan(
         print("[+] Completed: metadata analysis")
 
     # --- NEW FEATURE: Image Forensics ---
-    if image_forensics:
+    if image_forensics and not allow_safe_active:
+        print(f"\n[!] Image forensics skipped in {effective_profile} profile.")
+        results["image_forensics"] = {"note": f"Skipped in {effective_profile} profile."}
+    elif image_forensics:
         print("\n[*] Starting image forensics...")
         # First find images
         print("  [*] Scraping domain for images...")
@@ -527,13 +597,19 @@ def scan(
         print("[+] Completed: social engineering recon")
 
     # --- NEW FEATURE: Deep CMS Fingerprinting ---
-    if deep_cms_analysis:
+    if deep_cms_analysis and not allow_safe_active:
+        print(f"\n[!] Deep CMS fingerprinting skipped in {effective_profile} profile.")
+        results["cms_fingerprint"] = {"note": f"Skipped in {effective_profile} profile."}
+    elif deep_cms_analysis:
         print("\n[*] Starting Deep CMS Fingerprinting (Drupal/Joomla/Magento/Moodle)...")
         results["cms_fingerprint"] = comprehensive_cms_fingerprint(base_url)
         print("[+] Completed: CMS fingerprinting")
 
     # --- NEW FEATURE: WAF Detection ---
-    if waf_detection:
+    if waf_detection and not allow_active:
+        print(f"\n[!] WAF detection skipped in {effective_profile} profile.")
+        results["waf_detection"] = {"note": f"Skipped in {effective_profile} profile."}
+    elif waf_detection:
         print("\n[*] Detecting Web Application Firewall (WAF)...")
         results["waf_detection"] = detect_waf(domain)
         print(f"[+] Completed: WAF detection (Found: {results['waf_detection'].get('firewall', 'None')})")
@@ -583,6 +659,31 @@ def main():
         help="Skip the path bruteforcing module.",
     )
     parser.add_argument(
+        "--profile",
+        choices=["passive", "safe", "active", "aggressive"],
+        default="active",
+        help="Scan intensity profile. Default: active.",
+    )
+    parser.add_argument(
+        "--passive-only",
+        action="store_true",
+        help="Alias for --profile passive.",
+    )
+    parser.add_argument(
+        "--proxy",
+        help="Proxy URL for HTTP modules that use the shared client (e.g., http://127.0.0.1:8080).",
+    )
+    parser.add_argument(
+        "--rate-limit",
+        type=float,
+        default=0.0,
+        help="Minimum delay in seconds between shared HTTP client requests.",
+    )
+    parser.add_argument(
+        "--user-agent",
+        help="Custom User-Agent for HTTP modules that use the shared client.",
+    )
+    parser.add_argument(
         "--correlate",
         action="store_true",
         help="Correlate reverse IP results by checking WHOIS similarity (slow).",
@@ -590,7 +691,7 @@ def main():
     parser.add_argument(
         "--bug-hunt",
         action="store_true",
-        help="Enable comprehensive bug hunting mode with advanced security analysis.",
+        help="Enable comprehensive bug hunting mode. Requires --profile aggressive.",
     )
     parser.add_argument(
         "--cloud",
@@ -647,6 +748,17 @@ def main():
     )
     setup_logging()
     args = parser.parse_args()
+    if args.rate_limit < 0:
+        parser.error("--rate-limit must be greater than or equal to 0.")
+    if args.passive_only:
+        args.profile = "passive"
+    if args.bug_hunt and args.profile != "aggressive":
+        print("[!] --bug-hunt requires --profile aggressive and will be skipped.")
+    configure_http_client(
+        proxy=args.proxy,
+        user_agent=args.user_agent,
+        rate_limit=args.rate_limit,
+    )
     
     # Validate input domain
     target = args.target.strip()
@@ -671,6 +783,8 @@ def main():
         output_format=args.output,
         skip_ports=args.skip_ports,
         skip_bruteforce=args.skip_bruteforce,
+        passive_only=args.passive_only,
+        profile=args.profile,
         correlate_domains=args.correlate,
         bug_hunt_mode=args.bug_hunt,
         cloud_enum=args.cloud,

@@ -1,12 +1,14 @@
 # modules/tech_stack.py (Versi Upgrade)
-import requests
 from bs4 import BeautifulSoup
 from typing import Dict, Any
+from .http_client import get_http_client
 
 
 def get_tech_stack(url: str) -> Dict[str, Any]:
     try:
-        r = requests.get(url, timeout=10, headers={"User-Agent": "Modular-ReconX/1.0"})
+        r = get_http_client().get(
+            url, timeout=10, headers={"User-Agent": "Modular-ReconX/1.0"}
+        )
         headers = r.headers
         soup = BeautifulSoup(r.text, "html.parser")
 
@@ -41,7 +43,5 @@ def get_tech_stack(url: str) -> Dict[str, Any]:
             "security_headers": found_security_headers
             or {"note": "No specific security headers found."},
         }
-    except requests.exceptions.RequestException as e:
-        return {"error": f"Network error: {str(e)}"}
     except Exception as e:
         return {"error": str(e)}

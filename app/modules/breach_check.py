@@ -1,7 +1,7 @@
-import requests
 import os
 import logging  # Import logging module here
 from typing import Dict, Any
+from .http_client import get_http_client
 
 
 def check_email_breach_hibp(email: str) -> Dict[str, Any]:
@@ -21,7 +21,7 @@ def check_email_breach_hibp(email: str) -> Dict[str, Any]:
         }
 
     try:
-        response = requests.get(
+        response = get_http_client().get(
             f"https://haveibeenpwned.com/api/v3/breachedaccount/{email}",
             headers=headers,
             timeout=10,
@@ -52,7 +52,7 @@ def check_email_breach_hibp(email: str) -> Dict[str, Any]:
                 "email": email,
                 "error": f"API returned status code: {response.status_code} - {response.text}",
             }
-    except requests.exceptions.RequestException as e:
+    except Exception as e:
         logging.error(
             "A network error occurred during HIBP check for %s: %s",
             email,
@@ -74,7 +74,7 @@ def check_email_breach_mozilla(email: str) -> Dict[str, Any]:
     """Check email breach using Mozilla Monitor API (free alternative)."""
     try:
         # Mozilla Monitor API endpoint
-        response = requests.get(
+        response = get_http_client().get(
             f"https://monitor.firefox.com/api/v1/scan/{email}",
             timeout=10,
         )
@@ -100,7 +100,7 @@ def check_email_breach_mozilla(email: str) -> Dict[str, Any]:
                 "email": email,
                 "error": f"Mozilla Monitor API returned status code: {response.status_code}",
             }
-    except requests.exceptions.RequestException as e:
+    except Exception as e:
         logging.error(
             "A network error occurred during Mozilla Monitor check for %s: %s",
             email,

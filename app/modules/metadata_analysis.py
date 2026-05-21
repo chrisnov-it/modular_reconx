@@ -1,11 +1,11 @@
 import os
 import io
 import logging
-import requests
 import waybackpy
 from typing import Dict, List, Any
-import PyPDF2
+from pypdf import PdfReader
 import docx
+from .http_client import get_http_client
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 def extract_pdf_metadata(content: bytes) -> Dict[str, Any]:
     try:
         with io.BytesIO(content) as f:
-            reader = PyPDF2.PdfReader(f)
+            reader = PdfReader(f)
             info = reader.metadata
             if info:
                 return {k.strip('/'): v for k, v in info.items()}
@@ -118,7 +118,7 @@ def analyze_metadata(domain: str) -> Dict[str, Any]:
         for file_url in found_files:
             try:
                 print(f"  [*] Downloading and analyzing: {file_url}...")
-                response = requests.get(file_url, timeout=10)
+                response = get_http_client().get(file_url, timeout=10)
                 if response.status_code == 200:
                     meta = {}
                     file_type = "unknown"

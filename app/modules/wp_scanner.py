@@ -1,11 +1,11 @@
 # Inside modules/wp_scanner.py
 
 import os
-import requests
 import logging
 import re
 from typing import Dict, List, Any
 from urllib.parse import urljoin
+from .http_client import get_http_client
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ def check_plugin_vulnerabilities(plugin_slug: str, version: str) -> dict:
     headers = {"Authorization": f"Token token={api_key}"}
 
     try:
-        response = requests.get(url, headers=headers, timeout=15)
+        response = get_http_client().get(url, headers=headers, timeout=15)
         if response.status_code == 404:
             return {
                 "note": f"Plugin '{plugin_slug}' not found in WPScan database."
@@ -64,7 +64,7 @@ def check_plugin_vulnerabilities(plugin_slug: str, version: str) -> dict:
 
         return {"vulnerabilities": found_vulns}
 
-    except requests.exceptions.RequestException as e:
+    except Exception as e:
         return {"error": f"API request to WPScan failed: {e}"}
 
 
@@ -127,7 +127,7 @@ def detect_installed_plugins(base_url: str) -> List[Dict[str, str]]:
             css_url = urljoin(base_url, f"wp-content/plugins/{plugin_slug}/{plugin_slug}.css")
             if css_url not in checked_urls:
                 checked_urls.add(css_url)
-                response = requests.get(css_url, timeout=5)
+                response = get_http_client().get(css_url, timeout=5)
                 
                 if response.status_code == 200:
                     # If CSS file is found, the plugin is likely installed
@@ -142,7 +142,7 @@ def detect_installed_plugins(base_url: str) -> List[Dict[str, str]]:
             js_url = urljoin(base_url, f"wp-content/plugins/{plugin_slug}/{plugin_slug}.js")
             if js_url not in checked_urls:
                 checked_urls.add(js_url)
-                response = requests.get(js_url, timeout=5)
+                response = get_http_client().get(js_url, timeout=5)
                 
                 if response.status_code == 200:
                     version = _extract_version_from_js(response.text)
@@ -156,7 +156,7 @@ def detect_installed_plugins(base_url: str) -> List[Dict[str, str]]:
             readme_url = urljoin(base_url, f"wp-content/plugins/{plugin_slug}/readme.txt")
             if readme_url not in checked_urls:
                 checked_urls.add(readme_url)
-                response = requests.get(readme_url, timeout=5)
+                response = get_http_client().get(readme_url, timeout=5)
                 
                 if response.status_code == 200:
                     version = _extract_version_from_readme(response.text)
@@ -165,14 +165,14 @@ def detect_installed_plugins(base_url: str) -> List[Dict[str, str]]:
                         "version": version or "unknown"
                     })
                     
-        except requests.RequestException:
+        except Exception:
             # Skip if an error occurs
             continue
     
     # Method 2: Check via REST API (if enabled)
     try:
         rest_url = urljoin(base_url, "wp-json/wp/v2/plugins")
-        response = requests.get(rest_url, timeout=10)
+        response = get_http_client().get(rest_url, timeout=10)
         if response.status_code == 200:
             plugins_data = response.json()
             for plugin in plugins_data:
@@ -198,7 +198,7 @@ def detect_installed_plugins(base_url: str) -> List[Dict[str, str]]:
     
     # Method 3: Check from HTML page source for plugin signatures
     try:
-        response = requests.get(base_url, timeout=10)
+        response = get_http_client().get(base_url, timeout=10)
         if response.status_code == 200:
             html_content = response.text
             # Search for plugin signatures in HTML
@@ -212,7 +212,7 @@ def detect_installed_plugins(base_url: str) -> List[Dict[str, str]]:
     
     # Method 4: Check via generator meta tag or comment
     try:
-        response = requests.get(base_url, timeout=10)
+        response = get_http_client().get(base_url, timeout=10)
         if response.status_code == 200:
             html_content = response.text
             # Check WordPress version from meta tag

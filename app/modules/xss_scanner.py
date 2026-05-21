@@ -1,10 +1,10 @@
 
-import requests
 import urllib.parse
 import random
 import string
 import logging
 from typing import Dict, Any, List
+from .http_client import get_http_client
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +37,9 @@ def scan_param_xss(url: str, param: str, original_params: Dict) -> Dict[str, Any
         # We assume GET for now as it's the most common for Reflected XSS from links
         # Using a specialized User-Agent to identify the scan
         headers = {'User-Agent': 'ModularReconX-BugHunt/1.0'}
-        resp = requests.get(url, params=test_params, headers=headers, timeout=10)
+        resp = get_http_client().get(
+            url, params=test_params, headers=headers, timeout=10
+        )
         
         # Check reflection
         if payload in resp.text:

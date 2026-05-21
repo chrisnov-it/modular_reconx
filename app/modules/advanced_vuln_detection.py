@@ -2,13 +2,13 @@
 Advanced vulnerability detection module for bug hunting
 """
 
-import requests
 import re
 import time
 import threading
 from typing import Dict, List, Any, Tuple
 from urllib.parse import urljoin
 import logging
+from .http_client import get_http_client
 
 logger = logging.getLogger(__name__)
 
@@ -19,10 +19,7 @@ class AdvancedVulnerabilityDetector:
     def __init__(self, base_url: str, timeout: int = 10):
         self.base_url = base_url.rstrip('/')
         self.timeout = timeout
-        self.session = requests.Session()
-        self.session.headers.update({
-            'User-Agent': 'ModularReconX-AdvancedVuln/1.0'
-        })
+        self.headers = {'User-Agent': 'ModularReconX-AdvancedVuln/1.0'}
 
     def run_all_checks(self) -> Dict[str, Any]:
         """Run all advanced vulnerability checks"""
@@ -57,7 +54,9 @@ class AdvancedVulnerabilityDetector:
 
         try:
             # Get the main page
-            response = self.session.get(self.base_url, timeout=self.timeout)
+            response = get_http_client().get(
+                self.base_url, timeout=self.timeout, headers=self.headers
+            )
             response.raise_for_status()
 
             # Extract JavaScript URLs
@@ -79,7 +78,9 @@ class AdvancedVulnerabilityDetector:
 
             for js_url in js_urls[:5]:  # Limit to first 5 JS files
                 try:
-                    js_response = self.session.get(js_url, timeout=self.timeout)
+                    js_response = get_http_client().get(
+                        js_url, timeout=self.timeout, headers=self.headers
+                    )
                     if js_response.status_code == 200:
                         js_content = js_response.text
 
@@ -156,7 +157,9 @@ class AdvancedVulnerabilityDetector:
         # This would need subdomain enumeration results
         # For now, we'll check if we can detect takeover patterns on the main domain
         try:
-            response = self.session.get(self.base_url, timeout=self.timeout)
+            response = get_http_client().get(
+                self.base_url, timeout=self.timeout, headers=self.headers
+            )
 
             for service, config in takeover_signatures.items():
                 vulnerable = False
@@ -222,7 +225,7 @@ class AdvancedVulnerabilityDetector:
             try:
                 # Quick check if endpoint exists
                 test_url = urljoin(self.base_url, test["endpoint"])
-                response = self.session.head(test_url, timeout=5)
+                response = get_http_client().head(test_url, timeout=5, headers=self.headers)
 
                 if response.status_code not in [404, 403]:  # Endpoint might exist
                     # Perform basic race condition test with 2 concurrent requests
@@ -262,7 +265,9 @@ class AdvancedVulnerabilityDetector:
 
         try:
             # Get main page and look for forms
-            response = self.session.get(self.base_url, timeout=self.timeout)
+            response = get_http_client().get(
+                self.base_url, timeout=self.timeout, headers=self.headers
+            )
             response.raise_for_status()
 
             forms = self._extract_forms(response.text)
@@ -342,7 +347,12 @@ class AdvancedVulnerabilityDetector:
         def make_request(thread_id: int) -> Tuple[int, float]:
             start_time = time.time()
             try:
-                response = self.session.post(url, data=test_config.get("data", {}), timeout=5)
+                response = get_http_client().post(
+                    url,
+                    data=test_config.get("data", {}),
+                    timeout=5,
+                    headers=self.headers,
+                )
                 end_time = time.time()
                 return response.status_code, end_time - start_time
             except:

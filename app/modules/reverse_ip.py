@@ -1,9 +1,9 @@
 import os
 import shodan
-import requests
 import logging  # Pastikan ini diimpor
 from typing import Dict, Any
 from urllib.parse import urlparse
+from .http_client import get_http_client
 
 # Import ZoomEye SDK
 try:
@@ -45,12 +45,6 @@ def _reverse_ip_shodan(ip: str) -> Dict[str, Any]:
     except shodan.APIError as e:
         logger.error(f"Shodan API error for {ip}: {e}")
         return {"source": "Shodan", "error": f"Shodan API error: {e}"}
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Network error with Shodan for {ip}: {e}")
-        return {
-            "source": "Shodan",
-            "error": f"A network error occurred with Shodan: {e}",
-        }
     except Exception as e:
         logger.error(
             f"An unexpected error occurred with Shodan for {ip}: {e}", exc_info=True
@@ -67,7 +61,7 @@ def _reverse_ip_hackertarget(ip: str) -> Dict[str, Any]:
     """
     url = f"https://api.hackertarget.com/reverseiplookup/?q={ip}"
     try:
-        response = requests.get(url, timeout=10)
+        response = get_http_client().get(url, timeout=10)
         response.raise_for_status()  # Raise an HTTPError for bad responses (4xx or 5xx)
 
         content = response.text.strip()
@@ -97,7 +91,7 @@ def _reverse_ip_hackertarget(ip: str) -> Dict[str, Any]:
             f"HackerTarget reverse IP lookup successful for {ip}. Found {len(domains)} domains."
         )
         return {"source": "HackerTarget", "domains": sorted(list(set(domains)))}
-    except requests.exceptions.RequestException as e:
+    except Exception as e:
         logger.error(f"Network error with HackerTarget for {ip}: {e}")
         return {"source": "HackerTarget", "error": f"Network error: {e}"}
     except Exception as e:
@@ -115,7 +109,9 @@ def _reverse_ip_viewdns(ip: str) -> Dict[str, Any]:
     """
     url = f"https://viewdns.info/reverseip/?host={ip}&t=1"
     try:
-        response = requests.get(url, timeout=15, headers={"User-Agent": "OSINT-Tool"})
+        response = get_http_client().get(
+            url, timeout=15, headers={"User-Agent": "OSINT-Tool"}
+        )
         response.raise_for_status()
 
         if "No domains found on this IP address" in response.text:
@@ -163,7 +159,7 @@ def _reverse_ip_viewdns(ip: str) -> Dict[str, Any]:
             f"ViewDNS reverse IP lookup successful for {ip}. Found {len(domains)} domains."
         )
         return {"source": "ViewDNS", "domains": domains}
-    except requests.exceptions.RequestException as e:
+    except Exception as e:
         logger.error(f"Network error with ViewDNS for {ip}: {e}")
         return {"source": "ViewDNS", "error": f"Network error: {e}"}
     except Exception as e:
@@ -228,12 +224,6 @@ def _reverse_ip_zoomeye(ip: str) -> Dict[str, Any]:
                 "note": "No domains found for this IP on ZoomEye.",
             }
 
-    except requests.exceptions.RequestException as e:
-        logger.error(f"A network error occurred with ZoomEye for IP {ip}: {e}")
-        return {
-            "source": "ZoomEye",
-            "error": f"A network error occurred with ZoomEye: {e}",
-        }
     except Exception as e:
         logger.error(f"An unexpected error occurred with ZoomEye for IP {ip}: {e}")
         return {

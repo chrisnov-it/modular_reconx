@@ -1,6 +1,6 @@
-import requests
 import logging
 from typing import Dict, Any, Optional
+from .http_client import get_http_client
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,8 @@ def detect_waf(domain: str) -> Dict[str, Any]:
     
     try:
         # 1. Passive Analysis (Headers)
-        response = requests.get(url, timeout=10, allow_redirects=True)
+        http_client = get_http_client()
+        response = http_client.get(url, timeout=10, allow_redirects=True)
         headers = {k.lower(): v.lower() for k, v in response.headers.items()}
         cookies = {k.lower(): v for k, v in response.cookies.items()}
         
@@ -55,7 +56,7 @@ def detect_waf(domain: str) -> Dict[str, Any]:
         # 2. Active Analysis (Provocation)
         # Send a benign SQL injection payload to see if it gets blocked (403/406)
         payload_url = f"{url}/?id=1' OR 1=1 --"
-        provoke_response = requests.get(payload_url, timeout=10)
+        provoke_response = http_client.get(payload_url, timeout=10)
         
         if provoke_response.status_code in [403, 406, 501]:
             results["detected"] = True

@@ -1,7 +1,12 @@
+from pathlib import Path
+
 from setuptools import setup, find_packages
 
-with open("readme.md", "r", encoding="utf-8") as fh:
-    long_description = fh.read()
+readme_path = Path("README.md")
+if not readme_path.exists():
+    readme_path = Path("readme.md")
+
+long_description = readme_path.read_text(encoding="utf-8")
 
 with open("requirements.txt", "r", encoding="utf-8") as fh:
     requirements = [line.strip() for line in fh if line.strip() and not line.startswith("#")]

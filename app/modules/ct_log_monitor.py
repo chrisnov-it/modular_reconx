@@ -3,12 +3,12 @@ Certificate Transparency Log Monitoring Module for Modular ReconX
 Enhances subdomain discovery beyond wordlist-based enumeration
 """
 
-import requests
 import json
 import logging
 import time
 from typing import Dict, List, Any
 from urllib.parse import quote_plus
+from .http_client import get_http_client
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +53,7 @@ def query_crt_sh(domain: str) -> List[str]:
             "Accept": "application/json"
         }
         
-        response = requests.get(url, headers=headers, timeout=15)
+        response = get_http_client().get(url, headers=headers, timeout=15)
         response.raise_for_status()
         
         data = response.json()
@@ -71,7 +71,7 @@ def query_crt_sh(domain: str) -> List[str]:
                     if d.endswith("." + domain) or d == domain:
                         subdomains.add(d)
                         
-    except requests.exceptions.RequestException as e:
+    except Exception as e:
         logger.warning(f"Error querying crt.sh for {domain}: {e}")
     except json.JSONDecodeError as e:
         logger.warning(f"Error parsing crt.sh response for {domain}: {e}")
@@ -107,7 +107,7 @@ def query_certspotter(domain: str) -> List[str]:
             "Accept": "application/json"
         }
         
-        response = requests.get(url, params=params, headers=headers, timeout=15)
+        response = get_http_client().get(url, params=params, headers=headers, timeout=15)
         response.raise_for_status()
         
         data = response.json()
@@ -121,7 +121,7 @@ def query_certspotter(domain: str) -> List[str]:
                 if name.endswith("." + domain) or name == domain:
                     subdomains.add(name)
                     
-    except requests.exceptions.RequestException as e:
+    except Exception as e:
         logger.warning(f"Error querying CertSpotter for {domain}: {e}")
     except json.JSONDecodeError as e:
         logger.warning(f"Error parsing CertSpotter response for {domain}: {e}")
@@ -151,7 +151,7 @@ def query_bufferover(domain: str) -> List[str]:
             "Accept": "application/json"
         }
         
-        response = requests.get(url, headers=headers, timeout=15)
+        response = get_http_client().get(url, headers=headers, timeout=15)
         response.raise_for_status()
         
         data = response.json()
@@ -178,7 +178,7 @@ def query_bufferover(domain: str) -> List[str]:
                     if subdomain.endswith("." + domain) or subdomain == domain:
                         subdomains.add(subdomain)
                         
-    except requests.exceptions.RequestException as e:
+    except Exception as e:
         logger.warning(f"Error querying BufferOver for {domain}: {e}")
     except json.JSONDecodeError as e:
         logger.warning(f"Error parsing BufferOver response for {domain}: {e}")

@@ -291,10 +291,10 @@ reconx company.com --metadata --forensics
 **Goal**: Gather intelligence without detection
 
 ```bash
-# Passive-only with rate limiting
+# Passive-only with rate limiting for HTTP modules that use the shared client
 reconx target.com --passive-only --rate-limit 2.0
 
-# Use proxy for anonymity
+# Use proxy for HTTP modules that use the shared client
 reconx target.com --passive-only --proxy socks5://127.0.0.1:9050
 
 # Custom user agent
@@ -304,8 +304,8 @@ reconx target.com --passive-only --user-agent "Mozilla/5.0..."
 **Stealth tactics:**
 
 - Passive-only scanning
-- Rate limiting
-- Proxy usage
+- Rate limiting for shared-client HTTP modules
+- Proxy usage for shared-client HTTP modules
 - User agent rotation
 
 ### Scenario 14: Comprehensive Assessment

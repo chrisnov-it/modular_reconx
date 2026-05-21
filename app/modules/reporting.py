@@ -4,11 +4,6 @@ import csv
 import html
 from typing import Dict, Any, List, Union
 from datetime import datetime
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-from reportlab.lib.units import inch
 
 # Import helper functions from utils
 try:
@@ -33,6 +28,17 @@ def _generate_filename(domain: str, extension: str) -> str:
 # --- PDF Generation ---
 def save_pdf_output(data: Dict[str, Any]) -> str:
     """Saves the report data to a formal PDF file."""
+    try:
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+        from reportlab.lib.units import inch
+    except ImportError as e:
+        raise RuntimeError(
+            "PDF output requires reportlab. Install dependencies with `pip install -r requirements.txt`."
+        ) from e
+
     domain = data.get("domain", "unknown")
     filename = _generate_filename(domain, "pdf")
     os.makedirs("output", exist_ok=True)

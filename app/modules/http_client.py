@@ -7,6 +7,7 @@ import requests
 import random
 import time
 import logging
+import threading
 from typing import Dict, List, Optional, Any
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -59,6 +60,7 @@ class HTTPClient:
         self.timeout = timeout
         self.max_retries = max_retries
         self.last_request_time = 0
+        self._request_lock = threading.Lock()
         
         # Create session with retry strategy
         self.session = requests.Session()
@@ -110,21 +112,22 @@ class HTTPClient:
         Returns:
             Response object
         """
-        self._rate_limit()
-        
-        # Set default parameters
-        if "timeout" not in kwargs:
-            kwargs["timeout"] = self.timeout
-        if "headers" not in kwargs:
-            kwargs["headers"] = self._get_headers()
-        if "proxies" not in kwargs:
-            kwargs["proxies"] = self._get_proxies()
-            
-        logger.debug(f"Making GET request to {url}")
-        response = self.session.get(url, **kwargs)
-        self.last_request_time = time.time()
-        
-        return response
+        with self._request_lock:
+            self._rate_limit()
+
+            # Set default parameters
+            if "timeout" not in kwargs:
+                kwargs["timeout"] = self.timeout
+            if "headers" not in kwargs:
+                kwargs["headers"] = self._get_headers()
+            if "proxies" not in kwargs:
+                kwargs["proxies"] = self._get_proxies()
+
+            logger.debug(f"Making GET request to {url}")
+            response = self.session.get(url, **kwargs)
+            self.last_request_time = time.time()
+
+            return response
         
     def head(self, url: str, **kwargs) -> requests.Response:
         """
@@ -137,21 +140,22 @@ class HTTPClient:
         Returns:
             Response object
         """
-        self._rate_limit()
-        
-        # Set default parameters
-        if "timeout" not in kwargs:
-            kwargs["timeout"] = self.timeout
-        if "headers" not in kwargs:
-            kwargs["headers"] = self._get_headers()
-        if "proxies" not in kwargs:
-            kwargs["proxies"] = self._get_proxies()
-            
-        logger.debug(f"Making HEAD request to {url}")
-        response = self.session.head(url, **kwargs)
-        self.last_request_time = time.time()
-        
-        return response
+        with self._request_lock:
+            self._rate_limit()
+
+            # Set default parameters
+            if "timeout" not in kwargs:
+                kwargs["timeout"] = self.timeout
+            if "headers" not in kwargs:
+                kwargs["headers"] = self._get_headers()
+            if "proxies" not in kwargs:
+                kwargs["proxies"] = self._get_proxies()
+
+            logger.debug(f"Making HEAD request to {url}")
+            response = self.session.head(url, **kwargs)
+            self.last_request_time = time.time()
+
+            return response
         
     def post(self, url: str, **kwargs) -> requests.Response:
         """
@@ -164,21 +168,22 @@ class HTTPClient:
         Returns:
             Response object
         """
-        self._rate_limit()
-        
-        # Set default parameters
-        if "timeout" not in kwargs:
-            kwargs["timeout"] = self.timeout
-        if "headers" not in kwargs:
-            kwargs["headers"] = self._get_headers()
-        if "proxies" not in kwargs:
-            kwargs["proxies"] = self._get_proxies()
-            
-        logger.debug(f"Making POST request to {url}")
-        response = self.session.post(url, **kwargs)
-        self.last_request_time = time.time()
-        
-        return response
+        with self._request_lock:
+            self._rate_limit()
+
+            # Set default parameters
+            if "timeout" not in kwargs:
+                kwargs["timeout"] = self.timeout
+            if "headers" not in kwargs:
+                kwargs["headers"] = self._get_headers()
+            if "proxies" not in kwargs:
+                kwargs["proxies"] = self._get_proxies()
+
+            logger.debug(f"Making POST request to {url}")
+            response = self.session.post(url, **kwargs)
+            self.last_request_time = time.time()
+
+            return response
 
 # Global HTTP client instance for modules to use
 _http_client = None

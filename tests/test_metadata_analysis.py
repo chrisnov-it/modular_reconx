@@ -8,7 +8,7 @@ import sys
 import os
 import tempfile
 from docx import Document
-from PyPDF2 import PdfWriter
+from pypdf import PdfWriter
 
 # Add the parent directory to the path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
