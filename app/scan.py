@@ -71,7 +71,7 @@ import os
 load_dotenv()
 
 # Version information
-VERSION = "1.3.0"
+VERSION = "1.4.0"
 ScanProfile = Literal["passive", "safe", "active", "aggressive"]
 
 

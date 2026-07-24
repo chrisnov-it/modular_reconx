@@ -1,4 +1,4 @@
-# Modular ReconX v1.3.0
+# Modular ReconX v1.4.0
 
 Modular ReconX is a modular Python OSINT and bug bounty reconnaissance tool for analyzing domains, websites, and selected local files. It combines passive intelligence gathering, active reconnaissance, vulnerability enrichment, and report generation in one CLI.
 
