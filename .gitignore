@@ -31,3 +31,27 @@ output/*
 bfg.jar
 .qoder/
 AGENTS.md
+# Backup files
+*.bak
+*.orig
+*.rej
+
+# Specific env files
+.env.*
+!.env.example
+
+# Python misc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+
+# Virtualenv
+venv/
+.venv/
