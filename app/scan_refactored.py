@@ -207,12 +207,25 @@ def _build_scan_tasks(
 
 
 def _run_concurrent_scans(scans_to_run: dict, results: dict):
-    """Fase 3: eksekusi paralel dengan ThreadPoolExecutor."""
+    """Fase 3: eksekusi paralel dengan ThreadPoolExecutor.
+
+    Entry non-callable (mis. catatan "Skipped in <profile>") dimasukkan
+    langsung ke results; hanya entry callable yang dijalankan sebagai task.
+    """
     print("[*] Running concurrent scans...")
-    with concurrent.futures.ThreadPoolExecutor(max_workers=len(scans_to_run)) as executor:
+    callable_tasks = {
+        key: task for key, task in scans_to_run.items()
+        if isinstance(task, (list, tuple)) and task and callable(task[0])
+    }
+    # Literal (non-callable) values go straight into results
+    for key, value in scans_to_run.items():
+        if key not in callable_tasks:
+            results[key] = value
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max(len(callable_tasks), 1)) as executor:
         future_to_key = {
             executor.submit(func, *args): key
-            for key, (func, *args) in scans_to_run.items()
+            for key, (func, *args) in callable_tasks.items()
         }
         for future in concurrent.futures.as_completed(future_to_key):
             key = future_to_key[future]
