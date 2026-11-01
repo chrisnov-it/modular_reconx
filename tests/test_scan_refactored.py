@@ -1,4 +1,4 @@
-"""Tests for the refactored app.scan_refactored module.
+"""Tests for the refactored app.scan module.
 
 Mirrors the behavior tests in test_scan_profiles.py against the refactored
 scan() orchestrator to prove the refactor preserved behavior.
@@ -7,7 +7,7 @@ All network-touching functions are monkeypatched; no real I/O occurs.
 """
 from typing import Any, Dict
 
-import app.scan_refactored as scan_module
+import app.scan as scan_module
 
 
 def _patch_common_scan_dependencies(monkeypatch, calls: Dict[str, int]) -> None:
