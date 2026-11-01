@@ -1,0 +1,114 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "modular-reconx"
+version = "1.4.0"
+description = "A modular OSINT tool for performing complete analysis of domains or websites using open-source intelligence techniques"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+authors = [
+    { name = "Reynov Christian", email = "contact@chrisnov.com" }
+]
+keywords = ["osint", "security", "reconnaissance", "vulnerability", "web-scanner"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Information Technology",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "Topic :: Security",
+    "Topic :: Internet",
+    "Topic :: Utilities",
+    "Topic :: System :: Networking",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+
+dependencies = [
+    "beautifulsoup4==4.12.3",
+    "builtwith==1.3.4",
+    "dnspython==2.8.0",
+    "geoip2==5.1.0",
+    "google-generativeai==0.8.5",
+    "lxml>=6.0.2,<7.0.0",
+    "pillow==11.3.0",
+    "pyfiglet==1.0.4",
+    "pypdf>=6.1.0,<7.0.0",
+    "python-docx==1.1.0",
+    "python-dotenv==1.1.1",
+    "python-whois==0.9.5",
+    "requests>=2.26.0",
+    "reportlab==4.4.2",
+    "shodan==1.31.0",
+    "termcolor==3.1.0",
+    "tqdm==4.67.1",
+    "waybackpy==3.0.6",
+    "zoomeye==3.0.0",
+    "importlib_resources>=5.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-xdist>=3.0.0",
+    "ruff>=0.1.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/chrisnov-it/modular_reconx"
+Documentation = "https://github.com/chrisnov-it/modular_reconx#readme"
+Repository = "https://github.com/chrisnov-it/modular_reconx"
+Issues = "https://github.com/chrisnov-it/modular_reconx/issues"
+
+[project.scripts]
+reconx = "app.scan:main"
+modular-reconx = "app.scan:main"
+
+[tool.hatchling.build.targets.wheel]
+packages = ["app"]
+
+[tool.hatchling.build.targets.wheel.force-include]
+"app/data" = "app/data"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+addopts = [
+    "--strict-markers",
+    "--tb=short",
+    "--disable-warnings",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py38"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+]
+ignore = [
+    "E501",  # line too long (handled by formatter)
+    "B008",  # function calls in argument defaults
+    "B904",  # raise from
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*" = ["B", "F401", "F811"]
