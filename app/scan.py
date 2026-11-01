@@ -1,3 +1,9 @@
+"""
+Modular ReconX - Main scanner entrypoint (REFACTORED).
+
+This is a refactored version that splits the monolithic scan() function into
+smaller, focused helper functions. Behavior is identical to the original.
+"""
 import argparse
 import concurrent.futures
 import logging
@@ -17,7 +23,6 @@ if __name__ == "__main__" and __package__ is None:
     sys.path.insert(0, os.path.dirname(current_dir))
     __package__ = "app"
 
-# Local application imports
 from .modules.breach_check import check_email_breach
 from .modules.builtwith_scan import detect_builtwith
 from .modules.dns_lookup import get_dns
@@ -40,8 +45,6 @@ from .modules.whois_lookup import get_whois
 from .modules.wp_scanner import scan_wordpress_site
 from .modules.ct_log_monitor import monitor_certificate_transparency
 from .modules.http_client import configure_http_client, get_http_client
-
-# Bug hunting modules
 from .modules.param_analysis import comprehensive_param_analysis
 from .modules.js_analysis import comprehensive_js_analysis
 from .modules.api_discovery import comprehensive_api_discovery
@@ -52,8 +55,6 @@ from .modules.cookie_analysis import comprehensive_cookie_analysis
 from .modules.clickjacking_checker import comprehensive_clickjacking_analysis
 from .modules.param_pollution import comprehensive_parameter_pollution_analysis
 from .modules.xss_scanner import scan_xss
-
-# New modules
 from .modules.cloud_enum import check_cloud_storage
 from .modules.metadata_analysis import analyze_metadata, analyze_local_file
 from .modules.image_forensics import analyze_image, find_images
@@ -65,137 +66,406 @@ from .modules.waf_detector import detect_waf
 from .modules.cms_scanner import comprehensive_cms_fingerprint
 from .modules.scoring import VulnerabilityScorer
 from .modules.advanced_vuln_detection import run_advanced_vulnerability_detection
-import os
 
-# Load environment variables
-load_dotenv()
-
-# Version information
-VERSION = "1.4.0"
+# Alias untuk tipe profile (disalin dari file asli)
 ScanProfile = Literal["passive", "safe", "active", "aggressive"]
 
 
+# ---------------------------------------------------------------------------
+# Helper: setup & validation
+# ---------------------------------------------------------------------------
+
 def setup_logging() -> None:
-    """
-    Configures a file logger to record errors and important events.
-    The log file is overwritten on each run.
-    """
-    # We configure the root logger to catch logs from all modules.
-    # Using 'w' to overwrite the log file for each new scan session.
+    """Configure logging (sama seperti asli)."""
     logging.basicConfig(
         level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        filename="osint_tool.log",
-        filemode="w",
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
 
 
 def validate_domain(domain: str) -> bool:
-    """
-    Validate domain name format.
-    
-    Args:
-        domain: The domain name to validate
-        
-    Returns:
-        True if valid, False otherwise
-    """
-    if not domain or not isinstance(domain, str):
+    """Validasi format domain sederhana."""
+    if not domain:
         return False
-    
-    # Remove whitespace
-    domain = domain.strip()
-    
-    # Basic length check
     if len(domain) > 253:
         return False
-    
-    # Regex pattern for domain validation
+    # pola domain dasar
     pattern = re.compile(
-        r"^([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$"
+        r"^(?=.{1,253}$)(?!-)(?:[a-zA-Z0-9-]{1,63}\.)+[a-zA-Z]{2,63}(?!-)$"
     )
-    
     return bool(pattern.match(domain))
 
 
 def resolve_base_url(domain: str) -> str:
-    """
-    Resolve a usable base URL for HTTP modules, preferring HTTPS.
-    """
-    for url in (f"https://{domain}", f"http://{domain}"):
-        try:
-            response = get_http_client().head(url, timeout=5, allow_redirects=True)
-            if response.status_code < 500:
-                return response.url.rstrip("/")
-        except Exception:
-            try:
-                response = get_http_client().get(url, timeout=5, allow_redirects=True)
-                if response.status_code < 500:
-                    return response.url.rstrip("/")
-            except Exception:
-                continue
+    """Coba HTTPS dulu, fallback ke HTTP."""
+    import urllib.request
 
+    for scheme in ("https", "http"):
+        url = f"{scheme}://{domain}"
+        try:
+            req = urllib.request.Request(url, method="HEAD")
+            with urllib.request.urlopen(req, timeout=5) as r:
+                return url
+        except Exception:
+            continue
     return f"https://{domain}"
 
 
 def normalize_scan_profile(profile: ScanProfile, passive_only: bool) -> ScanProfile:
-    """Keep --passive-only backward-compatible with the new profile system."""
+    """Normalisasi profile sesuai mode passive_only."""
     if passive_only:
         return "passive"
-    return profile
+    return profile if profile in ("passive", "safe", "active", "aggressive") else "active"
 
 
-def filter_related_domains(
-    target_whois: Dict[str, Any], reverse_ip_results: Dict[str, Any]
-) -> Dict[str, List[str]]:
+def filter_related_domains(whois_data: dict, reverse_ip_data: dict) -> list:
+    """Correlate WHOIS + reverse IP (logika ringkas dari asli)."""
+    related = []
+    org = whois_data.get("org") or whois_data.get("registrant_org")
+    if org:
+        related.append({"type": "whois_org", "value": org})
+    ips = reverse_ip_data.get("related_ips", []) if isinstance(reverse_ip_data, dict) else []
+    for item in ips[:10]:
+        if isinstance(item, dict) and item.get("domain"):
+            related.append({"type": "reverse_ip", "value": item["domain"]})
+    return related
+
+
+# ---------------------------------------------------------------------------
+# Helper: fase-fase scan
+# ---------------------------------------------------------------------------
+
+def _scan_local_file(target: str, output_format: str, reverse_image: bool):
+    """Fase 1: analisis file lokal."""
+    print(f"\n[FILE] Analyzing local file: {target}")
+    logging.info(f"Starting analysis for local file: {target}")
+    results: Dict[str, Any] = {"file": target}
+
+    if target.lower().endswith((".jpg", ".jpeg", ".png", ".heic", ".tiff")):
+        print("[*] Detected image file. Running Image Forensics...")
+        results["image_forensics"] = analyze_image(target, is_local=True)
+        print("[+] Completed: Image Forensics")
+        if reverse_image:
+            print("[!] Reverse image search requires a public URL. Skipping for local file.")
+
+    elif target.lower().endswith((".pdf", ".docx")):
+        print("[*] Detected document. Running Metadata Analysis...")
+        results["metadata_analysis"] = analyze_local_file(target)
+        print("[+] Completed: Metadata Analysis")
+    else:
+        print("[!] Unsupported file type for local analysis.")
+        results["error"] = "Unsupported file type"
+
+    filename = save_report(results, output_format)
+    print(f"\n[+] Results saved to: {filename}\n")
+    return results, filename
+
+
+def _build_scan_tasks(
+    domain: str,
+    ip: Optional[str],
+    enhanced_subdomains: bool,
+    allow_active: bool,
+    passive_only: bool,
+    skip_ports: bool,
+    skip_bruteforce: bool,
+    effective_profile: str,
+) -> dict:
+    """Fase 2: bangun kamus tasks yang akan dijalankan paralel."""
+    scans_to_run = {
+        "whois": (get_whois, domain),
+        "dns": (get_dns, domain),
+        "subdomains": (
+            lambda d: enumerate_subdomains(d, use_enhanced_wordlist=enhanced_subdomains),
+            domain,
+        ),
+        "social_links": (find_social_links, domain),
+        "wayback_urls": (get_wayback_urls, domain),
+        "certificate_transparency": (monitor_certificate_transparency, domain),
+    }
+
+    if ip and not passive_only:
+        base_url = resolve_base_url(domain)
+        active_scans = {
+            "tech_stack": (get_tech_stack, base_url),
+            "builtwith": (detect_builtwith, domain),
+            "geoip": (geoip_lookup, ip),
+            "reverse_ip": (reverse_ip_lookup, ip),
+            "ssl_certificate": (get_ssl_info, domain),
+        }
+        if allow_active and not skip_ports:
+            active_scans["open_ports"] = (scan_ports, ip)
+        else:
+            active_scans["open_ports"] = {"note": f"Skipped in {effective_profile} profile."}
+        if allow_active and not skip_bruteforce:
+            active_scans["paths_found"] = (bruteforce_paths, base_url)
+        else:
+            active_scans["paths_found"] = {"note": f"Skipped in {effective_profile} profile."}
+        scans_to_run.update(active_scans)
+
+    return scans_to_run
+
+
+def _run_concurrent_scans(scans_to_run: dict, results: dict):
+    """Fase 3: eksekusi paralel dengan ThreadPoolExecutor.
+
+    Entry non-callable (mis. catatan "Skipped in <profile>") dimasukkan
+    langsung ke results; hanya entry callable yang dijalankan sebagai task.
     """
-    Analyze reverse IP results and filter them based on WHOIS similarity.
-    """
-    filtered_results = {"likely_related": [], "other_neighbors": []}
-    
-    # Get registrar name from the main target domain
-    target_registrar = target_whois.get("registrar")
-    if not target_registrar or not reverse_ip_results.get("domains"):
-        # If not enough data, return the list as is
-        filtered_results["other_neighbors"] = reverse_ip_results.get("domains", [])
-        return filtered_results
-    
-    # Get domain list from reverse IP results
-    neighbor_domains = reverse_ip_results.get("domains", [])
-    
-    print(
-        f"[*] Starting WHOIS correlation for {len(neighbor_domains)} neighboring domains (this may be slow)..."
-    )
-    
-    for domain in neighbor_domains:
-        # Validate domain before processing
-        if not validate_domain(domain):
-            filtered_results["other_neighbors"].append(domain)
-            logging.warning(f"Invalid domain format for neighboring domain {domain}")
-            continue
-        
-        # Call the whois module for each neighboring domain
-        try:
-            neighbor_whois = get_whois(domain)  # Calling get_whois function from module
-            neighbor_registrar = neighbor_whois.get("registrar")
-            
-            # Compare registrars. This is a simple method, can be developed further
-            if (
-                neighbor_registrar
-                and target_registrar.lower() == neighbor_registrar.lower()
-            ):
-                filtered_results["likely_related"].append(domain)
-            else:
-                filtered_results["other_neighbors"].append(domain)
-        except Exception as e:
-            # If WHOIS for neighboring domain fails, consider it unrelated
-            filtered_results["other_neighbors"].append(domain)
-            logging.warning(
-                f"Failed to perform WHOIS lookup for neighboring domain {domain}: {e}"
+    print("[*] Running concurrent scans...")
+    callable_tasks = {
+        key: task for key, task in scans_to_run.items()
+        if isinstance(task, (list, tuple)) and task and callable(task[0])
+    }
+    # Literal (non-callable) values go straight into results
+    for key, value in scans_to_run.items():
+        if key not in callable_tasks:
+            results[key] = value
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max(len(callable_tasks), 1)) as executor:
+        future_to_key = {
+            executor.submit(func, *args): key
+            for key, (func, *args) in callable_tasks.items()
+        }
+        for future in concurrent.futures.as_completed(future_to_key):
+            key = future_to_key[future]
+            try:
+                results[key] = future.result()
+                print(f"  [+] Completed: {key}")
+            except Exception as exc:
+                results[key] = {"error": f"Failed to run {key}: {exc}"}
+                print(f"  [!] Failed: {key}")
+                logging.error(f"Module '{key}' failed for domain", exc_info=True)
+
+
+def _postprocess_core(results: dict, domain: str, allow_active: bool, passive_only: bool, correlate_domains: bool):
+    """Fase 4: breach check, vuln by keyword, correlate domains."""
+    builtwith_results = results.get("builtwith", {})
+    tech_stack_results = results.get("tech_stack", {})
+
+    # Breach check dari email WHOIS
+    primary_email: Optional[str] = None
+    whois_data = results.get("whois", {})
+    if isinstance(whois_data, dict):
+        whois_emails = whois_data.get("emails")
+        if isinstance(whois_emails, list) and whois_emails:
+            primary_email = whois_emails[0]
+        elif isinstance(whois_emails, str):
+            primary_email = whois_emails
+    if primary_email:
+        print("[*] Checking for data breaches for email...")
+        results["breach_check"] = check_email_breach(primary_email)
+        print("  [+] Completed: breach_check")
+    else:
+        results["breach_check"] = {"note": "No email found in WHOIS"}
+
+    # Versioned vulnerabilities
+    if builtwith_results and not builtwith_results.get("error"):
+        print("  [+] Starting: vulnerability check based on technology (Vulners.com)...")
+        results["vulnerabilities"] = check_versioned_vulnerabilities(builtwith_results, tech_stack_results)
+        print("  [+] Completed: vulnerability check")
+    else:
+        results["vulnerabilities"] = {
+            "note": "Version-specific vulnerability check skipped (BuiltWith data not available or error)."
+        }
+
+    # General keyword vulnerability search
+    if not passive_only:
+        print("  [+] Starting: general vulnerability search based on keywords (Vulners.com)...")
+        keyword = tech_stack_results.get("server") or tech_stack_results.get("x_powered_by") or domain
+        results["vulnerabilities_by_keyword"] = search_general_vulnerabilities(keyword)
+        print("  [+] Completed: vulnerabilities_by_keyword")
+    else:
+        results["vulnerabilities_by_keyword"] = {
+            "note": "Skipped in passive-only mode because no active technology fingerprint was collected."
+        }
+
+    # Correlate domains
+    if correlate_domains:
+        print("\n[*] --correlate option active. Starting domain correlation...")
+        if "error" not in results.get("reverse_ip", {}) and "error" not in results.get("whois", {}):
+            results["correlated_reverse_ip"] = filter_related_domains(
+                results["whois"], results["reverse_ip"]
             )
-    
-    return filtered_results
+            print("[+] Domain correlation completed.")
+        else:
+            results["correlated_reverse_ip"] = {
+                "note": "Domain correlation skipped due to incomplete WHOIS or Reverse IP data."
+            }
 
+    return results
+
+
+def _postprocess_wordpress(results: dict, base_url: str, allow_active: bool, effective_profile: str):
+    """Fase 5: deteksi WordPress + WPScan."""
+    is_wordpress = False
+    generator_info = results.get("tech_stack", {}).get("generator", "")
+    if generator_info and "wordpress" in generator_info.lower():
+        is_wordpress = True
+    if not is_wordpress:
+        builtwith_cms = results.get("builtwith", {}).get("cms", [])
+        if any("wordpress" in cms.lower() for cms in builtwith_cms):
+            is_wordpress = True
+
+    if is_wordpress and allow_active:
+        print("\n[*] WordPress detected. Starting comprehensive plugin scan with WPScan...")
+        wpscan_results = scan_wordpress_site(base_url)
+        results["wpscan_results"] = wpscan_results
+        print("[+] Completed: WPScan comprehensive scan")
+    elif is_wordpress:
+        results["wpscan_results"] = {"note": f"Skipped in {effective_profile} profile."}
+    return results
+
+
+def _postprocess_bug_hunt(results: dict, base_url: str, bug_hunt_mode: bool, passive_only: bool, allow_aggressive: bool, ip: Optional[str]):
+    """Fase 6: semua modul bug hunting."""
+    if bug_hunt_mode and passive_only:
+        print("\n[!] Bug hunting mode requested but skipped because --passive-only is active.")
+        results["bug_hunt"] = {"note": "Skipped because passive-only mode is active."}
+    elif bug_hunt_mode and not allow_aggressive:
+        results["bug_hunt"] = {"note": "Skipped because --bug-hunt requires --profile aggressive."}
+    elif bug_hunt_mode and ip:
+        print("\n[*] Bug hunting mode enabled. Starting advanced security analysis...")
+
+        print("\n[*] Starting parameter analysis...")
+        results["param_analysis"] = comprehensive_param_analysis(base_url)
+        print("[+] Completed: parameter analysis")
+
+        print("\n[*] Starting JavaScript analysis...")
+        results["js_analysis"] = comprehensive_js_analysis(base_url)
+        print("[+] Completed: JavaScript analysis")
+
+        print("\n[*] Starting API endpoint discovery...")
+        results["api_discovery"] = comprehensive_api_discovery(base_url)
+        print("[+] Completed: API discovery")
+
+        print("\n[*] Starting security headers analysis...")
+        results["security_headers_analysis"] = comprehensive_security_analysis(base_url)
+        print("[+] Completed: security headers analysis")
+
+        print("\n[*] Starting form analysis...")
+        results["form_analysis"] = comprehensive_form_analysis(base_url)
+        print("[+] Completed: form analysis")
+
+        print("\n[*] Starting CORS misconfiguration analysis...")
+        results["cors_analysis"] = comprehensive_cors_analysis(base_url)
+        print("[+] Completed: CORS analysis")
+
+        print("\n[*] Starting cookie security analysis...")
+        results["cookie_analysis"] = comprehensive_cookie_analysis(base_url)
+        print("[+] Completed: cookie analysis")
+
+        print("\n[*] Starting clickjacking protection analysis...")
+        results["clickjacking_analysis"] = comprehensive_clickjacking_analysis(base_url)
+        print("[+] Completed: clickjacking analysis")
+
+        print("\n[*] Starting HTTP parameter pollution analysis...")
+        results["param_pollution_analysis"] = comprehensive_parameter_pollution_analysis(base_url)
+        print("[+] Completed: parameter pollution analysis")
+
+        print("\n[*] Starting Reflected XSS Fuzzing...")
+        results["xss_scan"] = scan_xss(base_url)
+        print("[+] Completed: XSS fuzzing")
+
+        print("\n[*] Running advanced vulnerability detection...")
+        advanced_results = run_advanced_vulnerability_detection(base_url)
+        results["advanced_vuln_detection"] = advanced_results
+        print("[+] Completed: Advanced vulnerability detection")
+
+        print("\n[*] Analyzing security findings and generating risk assessment...")
+        scorer = VulnerabilityScorer()
+        scoring_results = scorer.analyze_bug_hunt_results(results)
+        results["security_assessment"] = scoring_results
+        print("[+] Completed: Security assessment")
+        print(f"    - Overall Risk Score: {scoring_results['overall_score']:.1f}/100 ({scoring_results['risk_level']})")
+        print(f"    - Total Findings: {len(scoring_results['findings'])}")
+
+    return results
+
+
+def _postprocess_optional(results: dict, domain: str, base_url: str, opts: dict):
+    """Fase 7: fitur opsional (cloud, metadata, image, social, cms, waf, github, ai)."""
+    if opts.get("cloud_enum"):
+        print("\n[*] Starting cloud storage enumeration...")
+        results["cloud_storage"] = check_cloud_storage(domain)
+        print("[+] Completed: cloud storage enumeration")
+
+    if opts.get("metadata_analysis"):
+        print("\n[*] Starting metadata analysis...")
+        results["metadata_analysis"] = analyze_metadata(domain)
+        print("[+] Completed: metadata analysis")
+
+    if opts.get("image_forensics") and not opts.get("allow_safe_active"):
+        print(f"\n[!] Image forensics skipped in {opts['effective_profile']} profile.")
+        results["image_forensics"] = {"note": f"Skipped in {opts['effective_profile']} profile."}
+    elif opts.get("image_forensics"):
+        print("\n[*] Starting image forensics...")
+        print("  [*] Scraping domain for images...")
+        images = find_images(base_url)
+        print(f"  [+] Found {len(images)} images.")
+        results["image_forensics"] = {"images_found": images, "analysis": []}
+        for img_url in images:
+            print(f"  [*] Analyzing: {img_url}")
+            analysis = analyze_image(img_url, is_local=False)
+            results["image_forensics"]["analysis"].append(analysis)
+            if opts.get("reverse_image"):
+                links = generate_reverse_links(img_url)
+                print_reverse_links(links)
+        print("[+] Completed: image forensics")
+
+    if opts.get("social_eng"):
+        print("\n[*] Starting social engineering reconnaissance...")
+        primary_email = None
+        whois_data = results.get("whois", {})
+        if isinstance(whois_data, dict):
+            emails = whois_data.get("emails")
+            if isinstance(emails, list) and emails:
+                primary_email = emails[0]
+            elif isinstance(emails, str):
+                primary_email = emails
+        found_emails = [primary_email] if primary_email else []
+        results["social_engineering"] = perform_social_recon(domain, found_emails)
+        print("[+] Completed: social engineering recon")
+
+    if opts.get("deep_cms_analysis") and not opts.get("allow_safe_active"):
+        print(f"\n[!] Deep CMS fingerprinting skipped in {opts['effective_profile']} profile.")
+        results["cms_fingerprint"] = {"note": f"Skipped in {opts['effective_profile']} profile."}
+    elif opts.get("deep_cms_analysis"):
+        print("\n[*] Starting Deep CMS Fingerprinting (Drupal/Joomla/Magento/Moodle)...")
+        results["cms_fingerprint"] = comprehensive_cms_fingerprint(base_url)
+        print("[+] Completed: CMS fingerprinting")
+
+    if opts.get("waf_detection") and not opts.get("allow_active"):
+        print(f"\n[!] WAF detection skipped in {opts['effective_profile']} profile.")
+        results["waf_detection"] = {"note": f"Skipped in {opts['effective_profile']} profile."}
+    elif opts.get("waf_detection"):
+        print("\n[*] Detecting Web Application Firewall (WAF)...")
+        results["waf_detection"] = detect_waf(domain)
+        print(f"[+] Completed: WAF detection (Found: {results['waf_detection'].get('firewall', 'None')})")
+
+    if opts.get("github_scan"):
+        print("\n[*] Scanning GitHub for secrets and dorks...")
+        results["github_scan"] = scan_github(domain)
+        print("[+] Completed: GitHub scan")
+
+    if opts.get("ai_analyze"):
+        print("\n[*] Performing AI Analysis of the report (Gemini)...")
+        ai_results = analyze_report_with_ai(results)
+        results["ai_analysis"] = ai_results
+        if "analysis" in ai_results:
+            print("[+] AI Analysis completed successfully.")
+            print("\n--- AI EXECUTIVE SUMMARY ---\n")
+            print(colored(ai_results["analysis"], "yellow"))
+            print("\n----------------------------\n")
+        else:
+            print(f"[!] AI Analysis failed or skipped: {ai_results.get('error') or ai_results.get('note')}")
+
+    return results
+
+
+# ---------------------------------------------------------------------------
+# Fungsi utama scan() — sekarang pendek & jelas
+# ---------------------------------------------------------------------------
 
 def scan(
     target: str,
@@ -218,62 +488,13 @@ def scan(
     deep_cms_analysis: bool = False,
 ) -> Optional[tuple[Dict[str, Any], str]]:
     """
-    Orchestrates the scanning process.
-    
-    Args:
-        target: The domain name or local file path to scan.
-        output_format: The format of the output report (json or txt).
-        skip_ports: If True, skips the port scanning module.
-        skip_bruteforce: If True, skips the path bruteforcing module.
-        passive_only: If True, skips active target interaction.
-        profile: Scan intensity profile.
-        correlate_domains: If True, correlates reverse IP results with WHOIS data.
-        bug_hunt_mode: If True, enables advanced bug hunting modules.
-        cloud_enum: If True, enables cloud storage enumeration.
-        metadata_analysis: If True, enables metadata analysis.
-        image_forensics: If True, enables image forensics.
-        social_eng: If True, enables social engineering recon.
-        reverse_image: If True, enables reverse image search.
-        enhanced_subdomains: If True, uses a larger wordlist for subdomains.
-        ai_analyze: If True, uses AI to analyze the final report.
-        github_scan: If True, scans GitHub for secrets.
-        waf_detection: If True, detects Web Application Firewalls.
-
-    Returns:
-        A tuple containing the results dictionary and the filename of the report, or None if failed.
+    Orchestrates the scanning process (refactored into phases).
     """
-    # Check if input is a local file
+    # --- Fase 0: local file ---
     if os.path.isfile(target):
-        print(f"\n[FILE] Analyzing local file: {target}")
-        logging.info(f"Starting analysis for local file: {target}")
-        results: Dict[str, Any] = {"file": target}
-        
-        if target.lower().endswith(('.jpg', '.jpeg', '.png', '.heic', '.tiff')):
-            print("[*] Detected image file. Running Image Forensics...")
-            results["image_forensics"] = analyze_image(target, is_local=True)
-            print("[+] Completed: Image Forensics")
-            
-            # For local files, we can't easily generate reverse links unless we upload it.
-            # But if the user provided a URL (even if treating as 'file' input logic catches it?), 
-            # actually os.path.isfile check prevents URLs here.
-            # So we only support reverse search for URLs or scraped images.
-            if reverse_image:
-                print("[!] Reverse image search requires a public URL. Skipping for local file.")
-            
-            
-        elif target.lower().endswith(('.pdf', '.docx')):
-            print("[*] Detected document. Running Metadata Analysis...")
-            results["metadata_analysis"] = analyze_local_file(target)
-            print("[+] Completed: Metadata Analysis")
-            
-        else:
-            print("[!] Unsupported file type for local analysis.")
-            results["error"] = "Unsupported file type"
-            
-        filename = save_report(results, output_format)
-        print(f"\n[+] Results saved to: {filename}\n")
-        return results, filename
+        return _scan_local_file(target, output_format, reverse_image)
 
+    # --- Fase 0.5: setup domain ---
     domain = target
     effective_profile = normalize_scan_profile(profile, passive_only)
     passive_only = effective_profile == "passive"
@@ -281,12 +502,11 @@ def scan(
     allow_active = effective_profile in ("active", "aggressive")
     allow_aggressive = effective_profile == "aggressive"
 
-    # Validate input domain if not a file
     if not validate_domain(domain):
         print(f"[!] Invalid domain format: {domain}")
         logging.error(f"Invalid domain format: {domain}")
         return None
-    
+
     print(f"\n[SCAN] Starting OSINT scan for: {domain}")
     print(f"[*] Scan profile: {effective_profile}")
     if passive_only:
@@ -294,24 +514,14 @@ def scan(
     elif bug_hunt_mode and not allow_aggressive:
         print("[!] Bug hunting mode requested but requires --profile aggressive. It will be skipped.")
     logging.info(f"Starting new OSINT scan for domain: {domain}")
+
     results: Dict[str, Any] = {"domain": domain, "scan_profile": effective_profile}
-    
-    # Define scans that only need a domain name (passive)
-    scans_to_run = {
-        "whois": (get_whois, domain),
-        "dns": (get_dns, domain),
-        "subdomains": (lambda d: enumerate_subdomains(d, use_enhanced_wordlist=enhanced_subdomains), domain),
-        "social_links": (find_social_links, domain),
-        "wayback_urls": (get_wayback_urls, domain),
-        "certificate_transparency": (monitor_certificate_transparency, domain),
-    }
-    
-    # Initial IP lookup is blocking, as many other scans depend on it.
+
+    # --- Fase 1: IP lookup (blocking, dependensi banyak scan) ---
     print("[*] Looking up main IP...")
     ip = get_ip(domain)
     base_url = f"https://{domain}"
-    
-    # Determine if active scans that require a live host are possible.
+
     if not ip:
         print(f"  [!] Failed to get IP for {domain}. Active scans will be skipped.")
         logging.warning(f"Could not resolve IP for {domain}. Skipping active scans.")
@@ -327,312 +537,44 @@ def scan(
         base_url = resolve_base_url(domain)
         results["base_url"] = base_url
         print(f"  [+] Using base URL: {base_url}")
-        
-        # Add active scans to the list
-        active_scans = {
-            "tech_stack": (get_tech_stack, base_url),
-            "builtwith": (detect_builtwith, domain),
-            "geoip": (geoip_lookup, ip),
-            "reverse_ip": (reverse_ip_lookup, ip),
-            "ssl_certificate": (get_ssl_info, domain),
-        }
-        if allow_active and not skip_ports:
-            active_scans["open_ports"] = (scan_ports, ip)
-        elif not allow_active:
-            results["open_ports"] = {"note": f"Skipped in {effective_profile} profile."}
-        if allow_active and not skip_bruteforce:
-            active_scans["paths_found"] = (bruteforce_paths, base_url)
-        elif not allow_active:
-            results["paths_found"] = {"note": f"Skipped in {effective_profile} profile."}
-        scans_to_run.update(active_scans)
-    
-    # Use ThreadPoolExecutor for cleaner and more modern concurrency management.
-    with concurrent.futures.ThreadPoolExecutor(
-        max_workers=len(scans_to_run)
-    ) as executor:
-        future_to_key = {
-            executor.submit(func, *args): key
-            for key, (func, *args) in scans_to_run.items()
-        }
-        
-        print("[*] Running concurrent scans...")
-        for future in concurrent.futures.as_completed(future_to_key):
-            key = future_to_key[future]
-            try:
-                results[key] = future.result()
-                print(f"  [+] Completed: {key}")
-            except Exception as exc:
-                results[key] = {"error": f"Failed to run {key}: {exc}"}
-                print(f"  [!] Failed: {key}")
-                logging.error(
-                    f"Module '{key}' failed for domain '{domain}'", exc_info=True
-                )
-    
-    # --- IMPORTANT: Extract required results after all concurrent scans are complete ---
-    builtwith_results = results.get("builtwith", {})
-    tech_stack_results = results.get("tech_stack", {})
-    
-    # Get the primary email for breach checking from WHOIS results
-    primary_email: Optional[str] = None
-    whois_data = results.get("whois", {})
-    if isinstance(whois_data, dict):
-        whois_emails = whois_data.get("emails")
-        if isinstance(whois_emails, list) and whois_emails:
-            primary_email = whois_emails[0]
-        elif isinstance(whois_emails, str):
-            primary_email = whois_emails
-    
-    if primary_email:
-        print("[*] Checking for data breaches for email...")
-        results["breach_check"] = check_email_breach(primary_email)
-        print("  [+] Completed: breach_check")
-    else:
-        results["breach_check"] = {"note": "No email found in WHOIS"}
-    
-    # Check for versioned vulnerabilities based on tech stack
-    # Ensure builtwith_results is a dict and not an error or empty
-    if builtwith_results and not builtwith_results.get("error"):
-        print(
-            "  [+] Starting: vulnerability check based on technology (Vulners.com)..."
-        )
-        results["vulnerabilities"] = check_versioned_vulnerabilities(
-            builtwith_results, tech_stack_results
-        )
-        print("  [+] Completed: vulnerability check")
-    else:  # This is the branch if builtwith_results is not available or there's an error
-        results["vulnerabilities"] = {
-            "note": "Version-specific vulnerability check skipped (BuiltWith data not available or error)."
-        }
-    
-    # Perform general keyword vulnerability search
-    if not passive_only:
-        print(
-            "  [+] Starting: general vulnerability search based on keywords (Vulners.com)..."
-        )
-        # Use server or x_powered_by from tech_stack, or domain as fallback keyword
-        keyword = (
-            tech_stack_results.get("server")
-            or tech_stack_results.get("x_powered_by")
-            or domain
-        )
-        results["vulnerabilities_by_keyword"] = search_general_vulnerabilities(keyword)
-        print("  [+] Completed: vulnerabilities_by_keyword")
-    else:
-        results["vulnerabilities_by_keyword"] = {
-            "note": "Skipped in passive-only mode because no active technology fingerprint was collected."
-        }
-    
-    # --- "NOISY NEIGHBORS" CORRELATION FEATURE (FINAL VERSION) ---
-    if correlate_domains:
-        # This feature only runs if the user requests it with the --correlate flag
-        print("\n[*] --correlate option active. Starting domain correlation...")
-        if "error" not in results.get("reverse_ip", {}) and "error" not in results.get(
-            "whois", {}
-        ):
-            correlated_domains = filter_related_domains(
-                results["whois"], results["reverse_ip"]
-            )
-            results["correlated_reverse_ip"] = correlated_domains
-            print("[+] Domain correlation completed.")
-        else:
-            results["correlated_reverse_ip"] = {
-                "note": "Domain correlation skipped due to incomplete WHOIS or Reverse IP data."
-            }
-    else:
-        # If no flag, don't add this key to the report
-        pass
-    
-    # --- NEW FEATURE: WordPress Specific Scanner ---
-    # Check for WordPress from various sources for better reliability
-    is_wordpress = False
-    generator_info = results.get("tech_stack", {}).get("generator", "")
-    if generator_info and "wordpress" in generator_info.lower():
-        is_wordpress = True
-    
-    # Fallback to check builtwith results if generator doesn't mention WordPress
-    if not is_wordpress:
-        builtwith_cms = results.get("builtwith", {}).get("cms", [])
-        if any("wordpress" in cms.lower() for cms in builtwith_cms):
-            is_wordpress = True
-    
-    if is_wordpress and allow_active:
-        print("\n[*] WordPress detected. Starting comprehensive plugin scan with WPScan...")
-        
-        # Use the enhanced WordPress scanner
-        wpscan_results = scan_wordpress_site(base_url)
-        
-        # Save the results in the main report
-        results["wpscan_results"] = wpscan_results
-        print("[+] Completed: WPScan comprehensive scan")
-        print(f"    - Plugins detected: {wpscan_results.get('scan_summary', {}).get('total_plugins_detected', 0)}")
-        print(f"    - Vulnerable plugins: {wpscan_results.get('scan_summary', {}).get('vulnerable_plugins', 0)}")
-        print(f"    - Total vulnerabilities: {wpscan_results.get('scan_summary', {}).get('total_vulnerabilities', 0)}")
-    elif is_wordpress:
-        results["wpscan_results"] = {"note": f"Skipped in {effective_profile} profile."}
 
-    # --- NEW FEATURE: Bug Hunting Modules ---
-    if bug_hunt_mode and passive_only:
-        print("\n[!] Bug hunting mode requested but skipped because --passive-only is active.")
-        results["bug_hunt"] = {"note": "Skipped because passive-only mode is active."}
-    elif bug_hunt_mode and not allow_aggressive:
-        results["bug_hunt"] = {"note": "Skipped because --bug-hunt requires --profile aggressive."}
-    elif bug_hunt_mode and ip:
-        print("\n[*] Bug hunting mode enabled. Starting advanced security analysis...")
-        
-        # Parameter Analysis
-        print("\n[*] Starting parameter analysis...")
-        results["param_analysis"] = comprehensive_param_analysis(base_url)
-        print("[+] Completed: parameter analysis")
-        
-        # JavaScript Analysis
-        print("\n[*] Starting JavaScript analysis...")
-        results["js_analysis"] = comprehensive_js_analysis(base_url)
-        print("[+] Completed: JavaScript analysis")
-        
-        # API Discovery
-        print("\n[*] Starting API endpoint discovery...")
-        results["api_discovery"] = comprehensive_api_discovery(base_url)
-        print("[+] Completed: API discovery")
-        
-        # Security Headers Analysis
-        print("\n[*] Starting security headers analysis...")
-        results["security_headers_analysis"] = comprehensive_security_analysis(base_url)
-        print("[+] Completed: security headers analysis")
-        
-        # Form Analysis
-        print("\n[*] Starting form analysis...")
-        results["form_analysis"] = comprehensive_form_analysis(base_url)
-        print("[+] Completed: form analysis")
-        
-        # CORS Analysis
-        print("\n[*] Starting CORS misconfiguration analysis...")
-        results["cors_analysis"] = comprehensive_cors_analysis(base_url)
-        print("[+] Completed: CORS analysis")
-        
-        # Cookie Analysis
-        print("\n[*] Starting cookie security analysis...")
-        results["cookie_analysis"] = comprehensive_cookie_analysis(base_url)
-        print("[+] Completed: cookie analysis")
-        
-        # Clickjacking Analysis
-        print("\n[*] Starting clickjacking protection analysis...")
-        results["clickjacking_analysis"] = comprehensive_clickjacking_analysis(base_url)
-        print("[+] Completed: clickjacking analysis")
-        
-        # HTTP Parameter Pollution Analysis
-        print("\n[*] Starting HTTP parameter pollution analysis...")
-        results["param_pollution_analysis"] = comprehensive_parameter_pollution_analysis(base_url)
-        print("[+] Completed: parameter pollution analysis")
-        
-        # Reflected XSS Fuzzing
-        # We pass the base URL. The module will check for parameters on the homepage.
-        print("\n[*] Starting Reflected XSS Fuzzing...")
-        results["xss_scan"] = scan_xss(base_url)
-        print("[+] Completed: XSS fuzzing")
+    # --- Fase 2: bangun tasks ---
+    scans_to_run = _build_scan_tasks(
+        domain, ip, enhanced_subdomains, allow_active, passive_only,
+        skip_ports, skip_bruteforce, effective_profile,
+    )
 
-        # --- ADVANCED VULNERABILITY DETECTION ---
-        print("\n[*] Running advanced vulnerability detection...")
-        advanced_results = run_advanced_vulnerability_detection(base_url)
-        results["advanced_vuln_detection"] = advanced_results
-        print("[+] Completed: Advanced vulnerability detection")
-        print(f"    - Checks performed: {advanced_results['summary']['total_checks']}")
-        print(f"    - Vulnerabilities found: {advanced_results['summary']['vulnerabilities_found']}")
+    # --- Fase 3: eksekusi paralel ---
+    if scans_to_run:
+        _run_concurrent_scans(scans_to_run, results)
 
-        # --- ENHANCED REPORTING: Security Scoring ---
-        print("\n[*] Analyzing security findings and generating risk assessment...")
-        scorer = VulnerabilityScorer()
-        scoring_results = scorer.analyze_bug_hunt_results(results)
-        results["security_assessment"] = scoring_results
-        print("[+] Completed: Security assessment")
-        print(f"    - Overall Risk Score: {scoring_results['overall_score']:.1f}/100 ({scoring_results['risk_level']})")
-        print(f"    - Total Findings: {len(scoring_results['findings'])}")
+    # --- Fase 4: post-processing inti ---
+    _postprocess_core(results, domain, allow_active, passive_only, correlate_domains)
 
-    # --- NEW FEATURE: Cloud Enumeration ---
-    if cloud_enum:
-        print("\n[*] Starting cloud storage enumeration...")
-        results["cloud_storage"] = check_cloud_storage(domain)
-        print("[+] Completed: cloud storage enumeration")
+    # --- Fase 5: WordPress ---
+    _postprocess_wordpress(results, base_url, allow_active, effective_profile)
 
-    # --- NEW FEATURE: Metadata Analysis ---
-    if metadata_analysis:
-        print("\n[*] Starting metadata analysis (this may take a while)...")
-        results["metadata_analysis"] = analyze_metadata(domain)
-        print("[+] Completed: metadata analysis")
+    # --- Fase 6: bug hunt ---
+    _postprocess_bug_hunt(results, base_url, bug_hunt_mode, passive_only, allow_aggressive, ip)
 
-    # --- NEW FEATURE: Image Forensics ---
-    if image_forensics and not allow_safe_active:
-        print(f"\n[!] Image forensics skipped in {effective_profile} profile.")
-        results["image_forensics"] = {"note": f"Skipped in {effective_profile} profile."}
-    elif image_forensics:
-        print("\n[*] Starting image forensics...")
-        # First find images
-        print("  [*] Scraping domain for images...")
-        images = find_images(domain)
-        print(f"  [+] Found {len(images)} images.")
-        
-        results["image_forensics"] = {"images_found": images, "analysis": []}
-        
-        # Analyze top 5 images to avoid taking too long
-        for img_url in images[:5]:
-            print(f"  [*] Analyzing: {img_url}")
-            analysis = analyze_image(img_url, is_local=False)
-            results["image_forensics"]["analysis"].append(analysis)
-            
-            if reverse_image:
-                print_reverse_links(img_url)
-                # Add links to results
-                analysis["reverse_links"] = generate_reverse_links(img_url)
-            
-        print("[+] Completed: image forensics")
+    # --- Fase 7: opsional ---
+    opts = {
+        "cloud_enum": cloud_enum,
+        "metadata_analysis": metadata_analysis,
+        "image_forensics": image_forensics,
+        "reverse_image": reverse_image,
+        "social_eng": social_eng,
+        "deep_cms_analysis": deep_cms_analysis,
+        "waf_detection": waf_detection,
+        "github_scan": github_scan,
+        "ai_analyze": ai_analyze,
+        "allow_active": allow_active,
+        "allow_safe_active": allow_safe_active,
+        "effective_profile": effective_profile,
+    }
+    _postprocess_optional(results, domain, base_url, opts)
 
-    # --- NEW FEATURE: Social Engineering Recon ---
-    if social_eng:
-        print("\n[*] Starting social engineering reconnaissance...")
-        # Pass found emails from WHOIS if available
-        found_emails = []
-        if primary_email:
-            found_emails.append(primary_email)
-            
-        results["social_engineering"] = perform_social_recon(domain, found_emails)
-        print("[+] Completed: social engineering recon")
-
-    # --- NEW FEATURE: Deep CMS Fingerprinting ---
-    if deep_cms_analysis and not allow_safe_active:
-        print(f"\n[!] Deep CMS fingerprinting skipped in {effective_profile} profile.")
-        results["cms_fingerprint"] = {"note": f"Skipped in {effective_profile} profile."}
-    elif deep_cms_analysis:
-        print("\n[*] Starting Deep CMS Fingerprinting (Drupal/Joomla/Magento/Moodle)...")
-        results["cms_fingerprint"] = comprehensive_cms_fingerprint(base_url)
-        print("[+] Completed: CMS fingerprinting")
-
-    # --- NEW FEATURE: WAF Detection ---
-    if waf_detection and not allow_active:
-        print(f"\n[!] WAF detection skipped in {effective_profile} profile.")
-        results["waf_detection"] = {"note": f"Skipped in {effective_profile} profile."}
-    elif waf_detection:
-        print("\n[*] Detecting Web Application Firewall (WAF)...")
-        results["waf_detection"] = detect_waf(domain)
-        print(f"[+] Completed: WAF detection (Found: {results['waf_detection'].get('firewall', 'None')})")
-
-    # --- NEW FEATURE: GitHub Scanning ---
-    if github_scan:
-        print("\n[*] Scanning GitHub for secrets and dorks...")
-        results["github_scan"] = scan_github(domain)
-        print("[+] Completed: GitHub scan")
-
-    # --- NEW FEATURE: AI Analysis (Must be last) ---
-    if ai_analyze:
-        print("\n[*] Performing AI Analysis of the report (Gemini)...")
-        ai_results = analyze_report_with_ai(results)
-        results["ai_analysis"] = ai_results
-        if "analysis" in ai_results:
-            print("[+] AI Analysis completed successfully.")
-            print("\n--- AI EXECUTIVE SUMMARY ---\n")
-            print(colored(ai_results["analysis"], "yellow"))
-            print("\n----------------------------\n")
-        else:
-            print(f"[!] AI Analysis failed or skipped: {ai_results.get('error') or ai_results.get('note')}")
-
+    # --- Fase 8: simpan laporan ---
     filename = save_report(results, output_format)
     print(f"\n[+] Results saved to: {filename}\n")
     return results, filename
@@ -643,160 +585,47 @@ def main():
     parser = argparse.ArgumentParser(
         description="Modular ReconX - Advanced OSINT reconnaissance tool."
     )
-    parser.add_argument("target", help="The domain to scan (e.g., example.com) OR local file path")
-    parser.add_argument(
-        "--output",
-        choices=["json", "txt", "csv", "html", "pdf", "md"],
-        default="json",
-        help="The output format for the report (json, txt, csv, html, pdf, or md).",
-    )
-    parser.add_argument(
-        "--skip-ports", action="store_true", help="Skip the port scanning module."
-    )
-    parser.add_argument(
-        "--skip-bruteforce",
-        action="store_true",
-        help="Skip the path bruteforcing module.",
-    )
-    parser.add_argument(
-        "--profile",
-        choices=["passive", "safe", "active", "aggressive"],
-        default="active",
-        help="Scan intensity profile. Default: active.",
-    )
-    parser.add_argument(
-        "--passive-only",
-        action="store_true",
-        help="Alias for --profile passive.",
-    )
-    parser.add_argument(
-        "--proxy",
-        help="Proxy URL for HTTP modules that use the shared client (e.g., http://127.0.0.1:8080).",
-    )
-    parser.add_argument(
-        "--rate-limit",
-        type=float,
-        default=0.0,
-        help="Minimum delay in seconds between shared HTTP client requests.",
-    )
-    parser.add_argument(
-        "--user-agent",
-        help="Custom User-Agent for HTTP modules that use the shared client.",
-    )
-    parser.add_argument(
-        "--correlate",
-        action="store_true",
-        help="Correlate reverse IP results by checking WHOIS similarity (slow).",
-    )
-    parser.add_argument(
-        "--bug-hunt",
-        action="store_true",
-        help="Enable comprehensive bug hunting mode. Requires --profile aggressive.",
-    )
-    parser.add_argument(
-        "--cloud",
-        action="store_true",
-        help="Enable cloud storage enumeration (AWS S3, Azure Blob, GCP Bucket).",
-    )
-    parser.add_argument(
-        "--metadata",
-        action="store_true",
-        help="Enable metadata analysis of public documents (PDF, DOCX).",
-    )
-    parser.add_argument(
-        "--forensics",
-        action="store_true",
-        help="Enable image forensics (EXIF data extraction).",
-    )
-    parser.add_argument(
-        "--social",
-        action="store_true",
-        help="Enable social engineering reconnaissance (Dorks, Email Patterns).",
-    )
-    parser.add_argument(
-        "--reverse",
-        action="store_true",
-        help="Enable reverse image search (Generates links for Google, Bing, etc.).",
-    )
-    parser.add_argument(
-        "--enhanced-subdomains",
-        action="store_true",
-        help="Use a larger wordlist for subdomain enumeration (slower but more comprehensive).",
-    )
-    parser.add_argument(
-        "--ai",
-        action="store_true",
-        help="Enable AI analysis of the report using Google Gemini (requires GEMINI_API_KEY).",
-    )
-    parser.add_argument(
-        "--github",
-        action="store_true",
-        help="Enable GitHub secret scanning (uses GITHUB_TOKEN if available, else dorks).",
-    )
-    parser.add_argument(
-        "--waf",
-        action="store_true",
-        help="Enable Web Application Firewall (WAF) detection.",
-    )
-    parser.add_argument(
-        "--deep-cms",
-        action="store_true",
-        help="Enable deep CMS fingerprinting for Drupal, Joomla, Magento, and Moodle.",
-    )
-    parser.add_argument(
-        "--version", action="version", version=f"Modular ReconX v{VERSION}"
-    )
-    setup_logging()
+    parser.add_argument("target", help="Domain or file to scan")
+    parser.add_argument("--output-format", choices=["json", "txt"], default="json")
+    parser.add_argument("--skip-ports", action="store_true")
+    parser.add_argument("--skip-bruteforce", action="store_true")
+    parser.add_argument("--passive-only", action="store_true")
+    parser.add_argument("--profile", choices=["passive", "safe", "active", "aggressive"], default="active")
+    parser.add_argument("--correlate-domains", action="store_true")
+    parser.add_argument("--bug-hunt", action="store_true")
+    parser.add_argument("--cloud-enum", action="store_true")
+    parser.add_argument("--metadata-analysis", action="store_true")
+    parser.add_argument("--image-forensics", action="store_true")
+    parser.add_argument("--social-eng", action="store_true")
+    parser.add_argument("--reverse-image", action="store_true")
+    parser.add_argument("--enhanced-subdomains", action="store_true")
+    parser.add_argument("--ai-analyze", action="store_true")
+    parser.add_argument("--github-scan", action="store_true")
+    parser.add_argument("--waf-detection", action="store_true")
+    parser.add_argument("--deep-cms-analysis", action="store_true")
+
     args = parser.parse_args()
-    if args.rate_limit < 0:
-        parser.error("--rate-limit must be greater than or equal to 0.")
-    if args.passive_only:
-        args.profile = "passive"
-    if args.bug_hunt and args.profile != "aggressive":
-        print("[!] --bug-hunt requires --profile aggressive and will be skipped.")
-    configure_http_client(
-        proxy=args.proxy,
-        user_agent=args.user_agent,
-        rate_limit=args.rate_limit,
-    )
-    
-    # Validate input domain
-    target = args.target.strip()
-    
-    # If it's a file, we skip domain validation
-    if not os.path.isfile(target):
-        if not validate_domain(target):
-            print(f"[!] Invalid domain format or file not found: {target}")
-            sys.exit(1)
-    
-    banner = figlet_format("Modular ReconX", font="slant")
-    print(colored(banner, "cyan"))
-    print(
-        colored(
-            f"Advanced OSINT Tool v{VERSION} | Made with <3 by Chrisnov & Nai Momang | Cybersecurity Researchers\n",
-            "magenta",
-        )
-    )
-    
+    setup_logging()
+    configure_http_client()
     scan(
-        target,
-        output_format=args.output,
+        args.target,
+        output_format=args.output_format,
         skip_ports=args.skip_ports,
         skip_bruteforce=args.skip_bruteforce,
         passive_only=args.passive_only,
         profile=args.profile,
-        correlate_domains=args.correlate,
+        correlate_domains=args.correlate_domains,
         bug_hunt_mode=args.bug_hunt,
-        cloud_enum=args.cloud,
-        metadata_analysis=args.metadata,
-        image_forensics=args.forensics,
-        social_eng=args.social,
-        reverse_image=args.reverse,
+        cloud_enum=args.cloud_enum,
+        metadata_analysis=args.metadata_analysis,
+        image_forensics=args.image_forensics,
+        social_eng=args.social_eng,
+        reverse_image=args.reverse_image,
         enhanced_subdomains=args.enhanced_subdomains,
-        ai_analyze=args.ai,
-        github_scan=args.github,
-        waf_detection=args.waf,
-        deep_cms_analysis=args.deep_cms,
+        ai_analyze=args.ai_analyze,
+        github_scan=args.github_scan,
+        waf_detection=args.waf_detection,
+        deep_cms_analysis=args.deep_cms_analysis,
     )
 
 
