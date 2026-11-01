@@ -4,423 +4,245 @@ This document provides practical examples of using Modular ReconX for various se
 
 ## 📋 Table of Contents
 
+- [Quick Reference](#quick-reference)
 - [Bug Bounty Hunting](#bug-bounty-hunting)
 - [Penetration Testing](#penetration-testing)
 - [Security Research](#security-research)
 - [Incident Response](#incident-response)
 - [Compliance & Auditing](#compliance-auditing)
+- [Scan Profiles Guide](#scan-profiles-guide)
 
 ---
 
-## 🎯 Bug Bounty Hunting {#bug-bounty-hunting}
+## ⚡ Quick Reference
+
+```bash
+# Fastest, least noisy scan (safe for sensitive networks)
+reconx example.com --profile safe
+
+# Passive only (no packets sent to target directly)
+reconx example.com --profile passive
+
+# Full bug bounty hunt (requires aggressive profile)
+reconx example.com --profile aggressive --bug-hunt --output md
+
+# Fast scan skipping slow port scans and path brute-force
+reconx example.com --skip-ports --skip-bruteforce
+
+# Inspect a local suspicious file (no domain needed)
+reconx image.jpg
+reconx document.pdf
+```
+
+---
+
+## 🎯 Bug Bounty Hunting
 
 ### Scenario 1: Initial Reconnaissance
 
 **Goal**: Discover attack surface for a new bug bounty program
 
 ```bash
-# Phase 1: Passive reconnaissance
-reconx target.com --passive-only --correlate --output json
+# Phase 1: Pure passive reconnaissance (no alert triggers)
+reconx target.com --profile passive --output json
 
-# Phase 2: Subdomain discovery via CT logs
-reconx target.com --passive-only
+# Phase 2: Correlate IP neighbors and subdomains
+reconx target.com --profile passive --correlate --enhanced-subdomains
 
 # Phase 3: Cloud infrastructure enumeration
 reconx target.com --cloud
 
-# Phase 4: Technology stack identification
-reconx target.com --bug-hunt
+# Phase 4: Full bug-hunt (API, CORS, GraphQL, HPP)
+# NOTE: --bug-hunt ALWAYS requires --profile aggressive
+reconx target.com --profile aggressive --bug-hunt --output md
 ```
 
 **What to look for:**
-
-- Forgotten subdomains
-- Public cloud storage buckets
-- Outdated software versions
-- Exposed admin panels
+- Forgotten subdomains (`dev-api.target.com`, `admin-test.target.com`)
+- Public cloud storage buckets (AWS S3, Azure Blob, GCP)
+- Outdated software versions and exposed CVEs
+- Leaked credentials or tokens in JavaScript/API endpoints
 
 ### Scenario 2: Cloud Misconfiguration Hunt
 
-**Goal**: Find publicly accessible cloud storage
+**Goal**: Find publicly accessible cloud storage buckets/containers
 
 ```bash
-# Comprehensive cloud enumeration
+# Comprehensive cloud enumeration for main domain
 reconx company.com --cloud
 
-# Check specific subdomains
+# Check specific subdomains and environments
 reconx dev.company.com --cloud
 reconx staging.company.com --cloud
 reconx backup.company.com --cloud
 ```
 
 **Common findings:**
+- Public S3 buckets with read/write permissions
+- Misconfigured Azure Blob containers hosting backup dumps
+- GCP buckets exposing internal documents
 
-- Public S3 buckets with sensitive data
-- Misconfigured Azure Blob containers
-- Exposed GCP buckets
-- Backup files in cloud storage
+### Scenario 3: Document Metadata Intelligence
 
-### Scenario 3: Metadata Intelligence
-
-**Goal**: Extract sensitive information from public documents
+**Goal**: Extract sensitive internal info from publicly indexed documents
 
 ```bash
-# Find and analyze public documents
+# Find and analyze public documents (PDF, DOCX)
 reconx target.com --metadata
 
-# Combine with other recon
+# Combine document metadata with social engineering dorks
 reconx target.com --metadata --social
 ```
 
 **What you might discover:**
-
-- Employee names and email patterns
-- Internal software versions
-- Network paths and server names
-- Document creation dates (timeline)
+- Internal usernames, employee names, email naming patterns
+- Software used to author documents (reveals OS/software patch levels)
+- Internal network paths, printer paths, shared network drives
 
 ### Scenario 4: Image Forensics Investigation
 
-**Goal**: Find exposed sensitive data in images
+**Goal**: Find exposed sensitive metadata or location data in images
 
 ```bash
-# Analyze images on target domain
+# Analyze images on target domain and generate reverse search links
 reconx target.com --forensics --reverse
 
-# Local image analysis
+# Local image analysis (no domain scan needed)
 reconx suspicious_image.jpg
 ```
 
 **Potential findings:**
-
-- GPS coordinates in photos
-- Camera/device information
-- Software used to create images
-- Timestamps and metadata
+- GPS latitude/longitude embedded in uploaded photos (EXIF)
+- Camera device info, lens, original timestamps
+- Image alteration software signatures (Photoshop, GIMP)
 
 ---
 
-## 🔒 Penetration Testing {#penetration-testing}
+## 🔒 Penetration Testing
 
-### Scenario 5: External Penetration Test
+### Scenario 5: External Penetration Test (Authorized)
 
-**Goal**: Comprehensive external assessment
+**Goal**: Full scope reconnaissance for formal pen test engagement
 
 ```bash
-# Full reconnaissance (with authorization)
-reconx client.com --cloud --metadata --forensics --social --correlate --bug-hunt
+# Full reconnaissance with throttling to avoid IPS block
+reconx client.com --profile aggressive --bug-hunt \
+  --cloud --metadata --forensics --social --correlate \
+  --rate-limit 1.0 --output html
 
-# Use proxy for testing
-reconx client.com --proxy http://127.0.0.1:8080 --rate-limit 0.5
+# Route traffic through Burp Suite or testing proxy
+reconx client.com --profile safe --proxy http://127.0.0.1:8080
 
-# Passive-only for initial assessment
-reconx client.com --passive-only --correlate
+# Scan specific ports only
+reconx client.com --skip-bruteforce
 ```
-
-**Deliverables:**
-
-- Complete asset inventory
-- Technology stack analysis
-- Potential vulnerabilities
-- Cloud misconfigurations
 
 ### Scenario 6: Social Engineering Assessment
 
-**Goal**: Gather intelligence for social engineering tests
+**Goal**: Gather employee intelligence and OSINT for targeted phishing simulations
 
 ```bash
-# Generate dorks and analyze email patterns
+# Generate LinkedIn, Twitter dorks and analyze email patterns
 reconx target.com --social
 
-# Combine with metadata analysis
+# Combine with document metadata to confirm employee naming conventions
 reconx target.com --social --metadata
 ```
 
-**Use cases:**
-
-- Phishing campaign preparation
-- Pretexting scenarios
-- Employee enumeration
-- Email pattern discovery
-
 ---
 
-## 🔬 Security Research {#security-research}
+## 🔬 Security Research
 
-### Scenario 7: Vulnerability Research
+### Scenario 7: WordPress Site Security Audit
 
-**Goal**: Research specific vulnerability class
+**Goal**: Check for exposed WordPress plugins, themes, and version vulnerabilities
 
 ```bash
-# Focus on WordPress sites
-reconx wordpress-site.com --bug-hunt
+# Deep CMS detection + vulnerability lookup
+reconx wordpress-site.com --profile aggressive --bug-hunt --deep-cms
 
-# Check for specific misconfigurations
-reconx target.com --cloud --metadata
+# Check for outdated plugins via WPScan API (set WPSCAN_API_KEY in .env)
+reconx wordpress-site.com --profile safe --deep-cms
 ```
 
-**Research areas:**
+### Scenario 8: Comparative Multi-Target Assessment
 
-- WordPress plugin vulnerabilities
-- Cloud storage misconfigurations
-- Metadata leakage patterns
-- CORS misconfigurations
-
-### Scenario 8: Comparative Analysis
-
-**Goal**: Compare security posture of multiple domains
+**Goal**: Scripted batch analysis across a list of target domains
 
 ```bash
-# Scan multiple targets
-for domain in company1.com company2.com company3.com; do
-    reconx $domain --cloud --metadata --output json
+# Loop through targets and save individual JSON reports
+for domain in site1.com site2.com site3.com; do
+    echo "Scanning $domain..."
+    reconx "$domain" --profile safe --output json
 done
-
-# Analyze results for patterns
 ```
-
-**Analysis points:**
-
-- Common misconfigurations
-- Industry-specific issues
-- Best practices adoption
-- Security maturity levels
 
 ---
 
-## 🚨 Incident Response {#incident-response}
+## 🚨 Incident Response & Threat Hunting
 
-### Scenario 9: Data Breach Investigation
+### Scenario 9: Phishing Campaign Triage
 
-**Goal**: Identify exposed data after a breach
-
-```bash
-# Check for exposed cloud storage
-reconx compromised-company.com --cloud
-
-# Analyze public documents for leaks
-reconx compromised-company.com --metadata
-
-# Check for exposed images with sensitive data
-reconx compromised-company.com --forensics
-```
-
-**Investigation focus:**
-
-- Publicly accessible backups
-- Leaked credentials in metadata
-- Exposed customer data
-- Timeline reconstruction
-
-### Scenario 10: Phishing Investigation
-
-**Goal**: Investigate phishing campaign infrastructure
+**Goal**: Fingerprint attack infrastructure and malicious landing pages
 
 ```bash
-# Analyze phishing domain
-reconx suspicious-domain.com --passive-only
+# Passive fingerprinting of suspected phishing host
+reconx malicious-lookalike.com --profile passive --output json
 
-# Check for related infrastructure
-reconx suspicious-domain.com --correlate
+# Check hosting neighbor correlation (other scam sites on same IP)
+reconx malicious-lookalike.com --profile passive --correlate
 
-# Analyze images used in phishing
-reconx phishing-image.jpg
+# Analyze logo or image used in phishing kit
+reconx kit_logo.png
 ```
-
-**Intelligence gathering:**
-
-- Infrastructure fingerprinting
-- Related domains
-- Hosting provider information
-- Image source tracking
 
 ---
 
-## ✅ Compliance & Auditing {#compliance-auditing}
+## ⚙️ Scan Profiles Guide
 
-### Scenario 11: Cloud Security Audit
+Understanding profile intensity is crucial to avoid triggering alerts or knocking services down:
 
-**Goal**: Verify cloud storage security
+| Profile | Ports Scanned | Path Bruteforce | Fingerprinting | Bug Hunt Allowed | Network Impact |
+|---|---|---|---|---|---|
+| `passive` | ❌ No | ❌ No | ❌ No (API only) | ❌ No | None (third-party APIs only) |
+| `safe` | ❌ No | ❌ No | ✅ Yes (Headers/CMS) | ❌ No | Very low (normal HTTP requests) |
+| `active` *(default)* | ✅ Yes | ✅ Yes | ✅ Yes | ❌ No | Moderate (connection bursts) |
+| `aggressive` | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes (`--bug-hunt`) | High (fuzzing & testing payloads) |
 
-```bash
-# Audit all company domains
-reconx company.com --cloud
-reconx *.company.com --cloud
-
-# Check specific environments
-reconx dev.company.com --cloud
-reconx staging.company.com --cloud
-reconx prod.company.com --cloud
-```
-
-**Compliance checks:**
-
-- No public S3 buckets
-- Proper access controls
-- No exposed backups
-- Secure configuration
-
-### Scenario 12: Data Privacy Audit
-
-**Goal**: Ensure GDPR/CCPA compliance
+> ⚠️ **Important rule**: `--bug-hunt` **always requires** `--profile aggressive`. If you pass `--bug-hunt` without `--profile aggressive`, Modular ReconX will return an error or skip bug hunt modules to protect targets from unintended active fuzzing.
 
 ```bash
-# Check for metadata leakage
-reconx company.com --metadata
+# Correct:
+reconx target.com --profile aggressive --bug-hunt
 
-# Analyze images for PII
-reconx company.com --forensics
-
-# Check public documents
-reconx company.com --metadata --forensics
+# Incorrect (will trigger warning or skip):
+reconx target.com --profile safe --bug-hunt
 ```
-
-**Privacy concerns:**
-
-- PII in document metadata
-- GPS coordinates in images
-- Employee information exposure
-- Sensitive data in public files
-
----
-
-## 🎓 Advanced Techniques
-
-### Scenario 13: Stealth Reconnaissance
-
-**Goal**: Gather intelligence without detection
-
-```bash
-# Passive-only with rate limiting for HTTP modules that use the shared client
-reconx target.com --passive-only --rate-limit 2.0
-
-# Use proxy for HTTP modules that use the shared client
-reconx target.com --passive-only --proxy socks5://127.0.0.1:9050
-
-# Custom user agent
-reconx target.com --passive-only --user-agent "Mozilla/5.0..."
-```
-
-**Stealth tactics:**
-
-- Passive-only scanning
-- Rate limiting for shared-client HTTP modules
-- Proxy usage for shared-client HTTP modules
-- User agent rotation
-
-### Scenario 14: Comprehensive Assessment
-
-**Goal**: Complete security assessment
-
-```bash
-# Phase 1: Passive recon
-reconx target.com --passive-only --correlate --output json
-
-# Phase 2: Cloud & metadata
-reconx target.com --cloud --metadata --output json
-
-# Phase 3: Deep analysis
-reconx target.com --forensics --social --reverse --bug-hunt --output json
-
-# Phase 4: Focused testing
-# Use findings from previous phases for manual testing
-```
-
-**Complete workflow:**
-
-1. Passive reconnaissance
-2. Cloud enumeration
-3. Metadata analysis
-4. Image forensics
-5. Social engineering intel
-6. Vulnerability scanning
-7. Manual verification
 
 ---
 
 ## 💡 Pro Tips
 
-### Combining Flags Effectively
-
+### 1. Handling WAF and Rate Limits
+Use `--rate-limit` to add deliberate delays between requests, and rotate User-Agents:
 ```bash
-# Maximum intelligence gathering
-reconx target.com --cloud --metadata --forensics --social --reverse --correlate
-
-# Stealth mode
-reconx target.com --passive-only --rate-limit 1.5 --proxy http://proxy:8080
-
-# Bug bounty focused
-reconx target.com --cloud --metadata --bug-hunt --correlate
-
-# Quick assessment
-reconx target.com --passive-only --cloud
+reconx target.com --profile safe --rate-limit 1.5 --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
 ```
 
-### Output Management
+### 2. Output Formats for Different Audiences
+- For programmatic pipelines / jq: `--output json`
+- For spreadsheet auditing: `--output csv`
+- For executive/client deliverables: `--output html` or `--output pdf`
+- For bug bounty submission drafts: `--output md`
 
+### 3. AI-Powered Executive Summaries
+Set `GEMINI_API_KEY` in your `.env` file to auto-generate a plain-English risk narrative:
 ```bash
-# JSON output for automation
-reconx target.com --output json
-
-# HTML report for clients
-reconx target.com --output html
-
-# CSV for spreadsheet analysis
-reconx target.com --output csv
-```
-
-### Docker Usage
-
-```bash
-# Run in Docker for isolation
-docker run --rm modular-reconx target.com --cloud --metadata
-
-# With volume mapping for persistent results
-docker run --rm -v $(pwd)/output:/app/output modular-reconx target.com --all
-
-# Docker Compose for complex setups
-docker-compose run --rm reconx target.com --bug-hunt
+reconx target.com --profile aggressive --bug-hunt --ai --output html
 ```
 
 ---
 
-## ⚠️ Important Reminders
+## ⚠️ Responsible Use
 
-### Always Remember
-
-1. ✅ **Get Authorization**: Never scan without permission
-2. ✅ **Read Program Rules**: Understand scope and limitations
-3. ✅ **Use Rate Limiting**: Be respectful of target infrastructure
-4. ✅ **Document Everything**: Keep detailed logs
-5. ✅ **Report Responsibly**: Follow proper disclosure procedures
-
-### Common Mistakes to Avoid
-
-- ❌ Scanning out-of-scope targets
-- ❌ Aggressive scanning without rate limits
-- ❌ Ignoring program rules
-- ❌ Public disclosure before fixes
-- ❌ Not documenting findings properly
-
----
-
-## 📚 Additional Resources
-
-### Learning More
-
-- [RESPONSIBLE_USE.md](RESPONSIBLE_USE.md) - Ethical guidelines
-- [SECURITY.md](SECURITY.md) - Security policy
-- [TESTING.md](TESTING.md) - Test documentation
-- [CHANGELOG.md](CHANGELOG.md) - Version history
-
-### Community
-
-- GitHub Issues: Report bugs and request features
-- GitHub Discussions: Ask questions and share tips
-- Bug Bounty Platforms: Practice on authorized targets
-
----
-
-**Remember**: These examples are for authorized security testing only. Always obtain proper permission before scanning any target.
-
-Happy (Ethical) Hacking! 🔐
+Always obtain explicit written permission before running active scans against targets you do not own. Consult [RESPONSIBLE_USE.md](RESPONSIBLE_USE.md) and [SECURITY.md](SECURITY.md) before scanning.

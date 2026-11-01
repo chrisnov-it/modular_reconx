@@ -142,9 +142,10 @@ We recognize security researchers who help improve Modular ReconX:
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 1.2.x   | ✅ Yes             |
-| 1.1.x   | ✅ Yes             |
-| < 1.1   | ❌ No              |
+| 1.4.x   | ✅ Yes             |
+| 1.2.x   | ⚠️ Security fixes only |
+| < 1.2   | ❌ No              |
+
 
 ## 🔄 Security Update Process
 

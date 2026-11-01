@@ -2,6 +2,58 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.1] - 2026-11-01
+
+### 🔧 Refactoring & Architecture
+
+- **Modular Scan Architecture**: Split monolithic `scan()` function (442 lines) into 7 focused phase handlers:
+  - `_init_scan_report()` - Report structure initialization
+  - `_execute_phase_passive()` - Passive reconnaissance (WHOIS, DNS, SSL, tech stack)
+  - `_execute_phase_active()` - Active modules with concurrency (port scan, path brute-force)
+  - `_execute_phase_bug_hunt()` - Advanced web security checks (API discovery, CORS, GraphQL)
+  - `_execute_phase_ai()` - Gemini AI analysis
+  - `_save_scan_results()` - Multi-format report output (JSON/HTML/PDF/TXT/CSV/MD)
+  - `_run_concurrent_scans()` - Thread pool executor with callable validation
+
+### 🧪 Testing
+
+- **Port Scanner Coverage**: Added comprehensive unit tests for `port_scanner.py` (previously 0% coverage)
+- **Scan Profile Tests**: Added behavior parity tests for refactored scan orchestrator
+- **Test Suite**: 15 new passing tests (5 profile tests + 10 port scanner tests)
+- **CI/CD**: GitHub Actions workflow for Python 3.8-3.12 matrix testing
+
+### 📦 Packaging
+
+- **Modern Build System**: Migrated from `setup.py` to `pyproject.toml` (PEP 621)
+- **Build Backend**: Using Hatchling for fast, standards-compliant builds
+- **Console Scripts**: `reconx` and `modular-reconx` entry points
+- **Dev Dependencies**: Added optional `[dev]` extras (pytest, ruff, pytest-cov, pytest-xdist)
+- **Linting**: Ruff configuration for consistent code style
+
+### 🧹 Cleanup
+
+- **Dead Code Removal**: Deleted `app/modules/vulnerability_check.py` (60 lines, never imported)
+- **Module Audit**: Documented that all module pairs are complementary, not duplicates
+- **Documentation**: Added `AUDIT_DUPLICATES.md` with full analysis
+
+### 🐛 Fixes
+
+- **Concurrent Execution Bug**: Fixed `TypeError` when non-callable skip messages were submitted to ThreadPoolExecutor
+- **Import Fixes**: Updated test imports after refactor merge
+
+### 📚 Documentation
+
+- **Updated README.md**: Project layout, development workflow, modern packaging instructions
+- **Updated TESTING.md**: Current test suite, pytest workflow, coverage info
+- **Updated EXAMPLES.md**: Fixed `--bug-hunt` examples to require `--profile aggressive`
+- **Updated SECURITY.md**: Supported versions table
+
+### 🔄 Breaking Changes
+
+**NONE** - 100% backward compatible. Identical API, arguments, and output structure.
+
+---
+
 ## [1.4.0] - 2026-05-21
 
 ### 🚀 New Features
@@ -22,6 +74,8 @@ All notable changes to this project will be documented in this file.
 
 - Fixed `UnboundLocalError` in subdomain enumeration module.
 - Fixed `SyntaxError` in `scan.py` argument parsing.
+
+---
 
 ## [1.2.0] - 2025-12-03
 
