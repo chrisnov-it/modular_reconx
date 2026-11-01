@@ -48,14 +48,22 @@ def check_plugin_vulnerabilities(plugin_slug: str, version: str) -> dict:
                 if version == "0" or _is_version_less_than(version, fixed_in):
                     is_vulnerable = True
             
-            if is_vulnerable:
-                found_vulns.append(
-                    {
-                        "title": vuln.get("title"),
-                        "fixed_in": fixed_in,
-                        "references": vuln.get("references", {}).get("url", []),
-                    }
-                )
+            # Determine vulnerability status based on version comparison
+            if version == "unknown" or version == "0":
+                vuln_status = "UNKNOWN (version not detected - may be false positive)"
+            elif is_vulnerable:
+                vuln_status = "VULNERABLE"
+            else:
+                vuln_status = f"FIXED in {fixed_in}"
+            
+            found_vulns.append(
+                {
+                    "title": vuln.get("title"),
+                    "fixed_in": fixed_in,
+                    "status": vuln_status,
+                    "references": vuln.get("references", {}).get("url", []),
+                }
+            )
 
         if not found_vulns:
             return {

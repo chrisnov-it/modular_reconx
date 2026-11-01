@@ -75,6 +75,63 @@ ScanProfile = Literal["passive", "safe", "active", "aggressive"]
 # Helper: setup & validation
 # ---------------------------------------------------------------------------
 
+# ============================================================================
+# CDN/Proxy Detection & Origin IP Resolution
+# Skill: osint-reconnaissance
+# ============================================================================
+
+def _is_cdn_or_proxy_ip(ip: str) -> tuple:
+    """
+    Check if IP belongs to CDN/WAF/shared proxy.
+    Returns: (is_cdn: bool, provider: str)
+    """
+    if not ip:
+        return False, ""
+    
+    # Cloudflare ranges
+    cf_prefixes = ["104.16.", "104.17.", "104.18.", "104.19.", "104.20.", "104.21.",
+                   "104.22.", "104.23.", "104.24.", "104.25.", "104.26.", "104.27.",
+                   "172.64.", "172.65.", "172.66.", "172.67.", "172.68.", "172.69.",
+                   "108.162.", "190.93.", "188.114.", "197.234.", "198.41."]
+    if any(ip.startswith(p) for p in cf_prefixes):
+        return True, "Cloudflare"
+    
+    # AWS CloudFront
+    if any(ip.startswith(p) for p in ["13.32.", "13.33.", "13.35.", "13.224.", "13.225."]):
+        return True, "AWS CloudFront"
+    
+    # Akamai
+    if any(ip.startswith(p) for p in ["23.0.", "23.1.", "23.2.", "23.3.", "23.4.", "23.5.", "23.6."]):
+        return True, "Akamai"
+    
+    # Fastly
+    if ip.startswith("151.101."):
+        return True, "Fastly"
+    
+    return False, ""
+
+def _attempt_origin_ip(domain: str, cdn_ip: str) -> str:
+    """
+    Try to find origin IP via bypass subdomains (cpanel, direct, mail, etc.)
+    Returns: origin_ip if found, else cdn_ip
+    """
+    import socket
+    bypass_subs = ["direct", "origin", "cpanel", "webmail", "mail", "ftp"]
+    
+    for sub in bypass_subs:
+        try:
+            candidate_ip = socket.gethostbyname(f"{sub}.{domain}")
+            if candidate_ip != cdn_ip:
+                is_cdn, _ = _is_cdn_or_proxy_ip(candidate_ip)
+                if not is_cdn:
+                    logger.info(f"Origin IP found via {sub}.{domain}: {candidate_ip}")
+                    return candidate_ip
+        except:
+            pass
+    
+    return cdn_ip
+
+
 def setup_logging() -> None:
     """Configure logging (sama seperti asli)."""
     logging.basicConfig(
@@ -190,7 +247,7 @@ def _build_scan_tasks(
             "tech_stack": (get_tech_stack, base_url),
             "builtwith": (detect_builtwith, domain),
             "geoip": (geoip_lookup, ip),
-            "reverse_ip": (reverse_ip_lookup, ip),
+            # reverse_ip: conditionally added after CDN check
             "ssl_certificate": (get_ssl_info, domain),
         }
         if allow_active and not skip_ports:
@@ -202,6 +259,22 @@ def _build_scan_tasks(
         else:
             active_scans["paths_found"] = {"note": f"Skipped in {effective_profile} profile."}
         scans_to_run.update(active_scans)
+    
+    # CDN-aware reverse IP lookup (skip if CDN to save API quota)
+    if ip:
+        is_cdn, cdn_provider = _is_cdn_or_proxy_ip(ip)
+        if is_cdn:
+            logger.info(f"IP {ip} is {cdn_provider} edge - skipping reverse IP to avoid false positives")
+            scans_to_run["reverse_ip"] = {
+                "source": "Skipped",
+                "infrastructure_type": cdn_provider,
+                "is_origin_ip": False,
+                "note": f"IP is {cdn_provider} edge node. Reverse lookup skipped to avoid false positives from shared infrastructure.",
+                "domains": []
+            }
+        else:
+            # Not CDN - safe to do reverse lookup
+            scans_to_run["reverse_ip"] = (reverse_ip_lookup, ip)
 
     return scans_to_run
 
