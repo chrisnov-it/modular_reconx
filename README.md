@@ -60,10 +60,43 @@ source .venv/bin/activate
 uv pip install -e ".[dev]"
 ```
 
-### 2. Installation (Windows PowerShell)
+### 2. Installation (Windows PowerShell with `uv`)
+
+[`uv`](https://docs.astral.sh/uv/) is the recommended way to manage Python environments on Windows — it handles venv creation, dependency installation, and even Python runtime downloads in one tool with 10-100x faster installs than pip.
+
+**Install `uv`:**
+```powershell
+winget install astral-sh.uv
+uv --version
+```
+
+**Set up the project:**
+```powershell
+git clone https://github.com/chrisnov-it/modular_reconx.git
+cd modular_reconx
+
+# Create venv with a specific Python version (uv downloads it automatically if missing)
+uv venv --python 3.13 .venv
+.\.venv\Scripts\Activate.ps1
+
+# Install the project + all dependencies in one step
+uv pip install -e .
+
+# Verify
+reconx --help
+reconx example.com --profile safe --skip-ports --skip-bruteforce
+```
+
+To include development/testing tools:
+```powershell
+uv pip install -e ".[dev]"
+```
+
+### 3. Installation (Windows PowerShell with standard pip)
+
+If you prefer not to use `uv`, the built-in `venv` + `pip` workflow works fine:
 
 ```powershell
-# Clone the repository
 git clone https://github.com/chrisnov-it/modular_reconx.git
 cd modular_reconx
 
@@ -79,8 +112,71 @@ pip install -e .
 reconx --help
 ```
 
-> **PowerShell Execution Policy Tip**: If `.venv\Scripts\Activate.ps1` gives an execution policy error, run:
-> `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`
+### 4. Installation (Windows with Python Manager `py`)
+
+Modern Windows Python installations use the [Python Manager](https://docs.python.org/3/using/windows.html). If `python` opens the Microsoft Store instead of Python, install and configure `py` first:
+
+```powershell
+# Install Python Manager via WinGet
+winget install 9NQ7512CXL7T -e
+py install --configure -y
+
+# Install a specific Python version
+py install 3.13
+
+# Create venv using the py launcher
+py -3.13 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+
+python -m pip install --upgrade pip
+pip install -e .
+
+reconx --help
+```
+
+### Reopening the Project Later
+
+After the virtual environment has already been created, just activate and go:
+
+**Windows:**
+```powershell
+cd C:\path\to\modular_reconx
+.\.venv\Scripts\Activate.ps1
+reconx --help
+```
+
+**Linux / macOS:**
+```bash
+cd /path/to/modular_reconx
+source .venv/bin/activate
+reconx --help
+```
+
+### Windows Troubleshooting
+
+**PowerShell blocks venv activation:**
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+.\.venv\Scripts\Activate.ps1
+```
+
+**`python` opens Microsoft Store instead of Python:**
+Install the Python Manager (`winget install 9NQ7512CXL7T -e`), run `py install --configure -y`, and check Windows Settings → App Execution Aliases — disable the store aliases for `python.exe` and `python3.exe`.
+
+**`lxml` asks for Microsoft Visual C++ Build Tools:**
+This means pip could not find a prebuilt wheel and tried to compile from source. Force binary-only installation:
+```powershell
+pip install --only-binary=:all: "lxml>=6.0.2,<7.0.0"
+pip install -e .
+```
+If wheels still aren't available for your Python version, use a version with wider wheel coverage (e.g. `3.12` or `3.13` instead of `3.14`).
+
+**`reconx` is not recognized after install:**
+Make sure the venv is activated (you should see `(.venv)` in your prompt), then reinstall:
+```powershell
+.\.venv\Scripts\Activate.ps1
+pip install -e .
+```
 
 ---
 
